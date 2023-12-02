@@ -4,14 +4,48 @@ project:
 website:
   title: "ISSS624"
   navbar:
+    background: dark
+    foreground: success
+    logo: images/name.png
     left:
+      - text: Hands-on Exercises
+        menu: 
+        - text: Hands-on Exercise 1a - Geospatial Data Wrangling with R
+          href: Hands-on_Ex/Hands-on_Ex1/Hands-on_Ex1_1.html
+        - text: Hands-on Exercise 1b - Choropleth Mapping with R
+          href: Hands-on_Ex/Hands-on_Ex1/Hands-on_Ex1_2.html
+        - text: Hands-on Exercise 2a - Spatial Weights and Applications
+          href: Hands-on_Ex/Hands-on_Ex2/Hands-on_Ex2_1.html
+        - text: Hands-on Exercise 2b - Global Measures of Spatial Autocorrelation
+          href: Hands-on_Ex/Hands-on_Ex2/Hands-on_Ex2_2.html
+        - text: Hands-on Exercise 2c - Local Measures of Spatial Autocorrelation
+          href: Hands-on_Ex/Hands-on_Ex2/Hands-on_Ex2_3.html
+        - text: Hands-on Exercise 3 - Processing and Visualising Flow Data
+          href: Hands-on_Ex/Hands-on_Ex3/Hands-on_Ex3.html
+      - text: In-class_Exercise
+        menu: 
+        - text: In-class Exercise 1
+          href: In-class_Ex/In-class_Ex1/In-class_Ex1.html
+        - text: "In-class Exercise 2: Spatial Weights"
+          href: In-class_Ex/In-class_Ex2/In-class_Ex2-Spatial_Weights.html
+        - text: "In-class Exercise 2: GLSA"
+          href: In-class_Ex/In-class_Ex2/In-class_Ex2-GLSA.html
+        - text: "In-class Exercise 2: EHSA"
+          href: In-class_Ex/In-class_Ex2/In-class_Ex2-EHSA.html
+        - text: In-class Exercise 3
+          href: In-class_Ex/In-class_Ex3/In-class_Ex3.html
+      - text: Take-Home_Exercise
+        menu: 
+        - text: Take-Home Exercise 1
+          href: Take-Home_Ex/Take-Home_Ex1/Take-Home_Ex1.html
+    right:
       - href: index.qmd
         text: Home
-      - about.qmd
-
+  sidebar:
+    contents: auto
 format:
   html:
-    theme: cosmo
+    theme: quartz
     css: styles.css
     toc: true
 

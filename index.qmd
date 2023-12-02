@@ -1,11 +1,31 @@
 ---
 title: "ISSS624"
+author: "Ten Wei Peng (JIN)"
+date-modified: "last-modified"
+format: html
+editor: visual
 ---
 
-This is a Quarto website.
+```{=html}
+<style>
+  .top-left {
+    position: absolute;
+    top: 225px;
+    left: 350px;
+    max-width: 350px; /* Adjust the width as needed */
+    max-height: 350px; /* Adjust the height as needed */
+  }
 
-To learn more about Quarto websites visit <https://quarto.org/docs/websites>.
-
-```{r}
-1 + 1
+  .introduction {
+    margin-top: 400px; /* Adjust the margin to prevent overlap */
+    margin-left: 0px; /* Adjust the margin to align with the image */
+  }
+</style>
 ```
+<img src="images/photo.jpg" alt="Ten Wei Peng" class="top-left"/>
+
+::: introduction
+### Welcome to **Jin**'s Analytics Journey!
+
+#### Let's deep dive into what he has learnt in ISSS624 Geospatial Analytics Applications!
+:::
