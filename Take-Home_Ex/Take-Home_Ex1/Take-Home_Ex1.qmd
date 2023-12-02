@@ -695,15 +695,15 @@ wm_q_4 <- weekend_evening_peak_join_geometry %>%
 
 In this section, we will compute Local Moran's I of `Total Passenger Trips` at county level by using **local_moran()** of sfdep package.
 
-The provided code conducts a Local Moran's I analysis on four distinct datasets *(wm_q_1, wm_q_2, wm_q_3, wm_q_4)*, each associated with specific time periods or scenarios. 
+The provided code conducts a Local Moran's I analysis on four distinct datasets *(wm_q_1, wm_q_2, wm_q_3, wm_q_4)*, each associated with specific time periods or scenarios.
 
-The analysis focuses on the spatial autocorrelation of the variable TOT_TRIPS within each dataset, employing the local_moran function with 
+The analysis focuses on the spatial autocorrelation of the variable TOT_TRIPS within each dataset, employing the local_moran function with
 
 -   neighbors (nb) and
 
 -   weights (wt) and
 
--   99 simulations. 
+-   99 simulations.
 
 The calculated Local Moran's I statistic assesses whether nearby observations exhibit similar total trip values, revealing spatial patterns and clusters.
 
@@ -744,12 +744,11 @@ lisa_4 <- wm_q_4 %>%
 
 In the following code section, tmap functions are utilized to create a choropleth map based on the values in the **ii** field, representing the Local Moran's I values. The chosen tmap_style option is set to **albatross** to suit the grid's nature and emphasize clusters, where lighter colors indicate positive values and darker colors indicate negative values.
 
-It's important to note that a positive Local Moran’s I value signifies a feature's membership in a cluster, while a negative value suggests that a feature is an outlier.
+It's important to note that a positive Local Moran's I value signifies a feature's membership in a cluster, while a negative value suggests that a feature is an outlier.
 
-Examining the map, regions shaded in various hues of green indicate their membership in one or more clusters.While there are overlapping areas among the maps generated for the four periods of interest, there are also discrepancies. 
+Examining the map, regions shaded in various hues of green indicate their membership in one or more clusters.While there are overlapping areas among the maps generated for the four periods of interest, there are also discrepancies.
 
-However, relying solely on the local Moran’s score is insufficient for depicting spatial clustering, as it doesn't provide information about whether the variable's value (**Total Passenger Trips**) being examined is high or low, and whether the test result is statistically significant. We need to proceed with analyzing only the regions with statistically significant values of total passenger trips.
-
+However, relying solely on the local Moran's score is insufficient for depicting spatial clustering, as it doesn't provide information about whether the variable's value (**Total Passenger Trips**) being examined is high or low, and whether the test result is statistically significant. We need to proceed with analyzing only the regions with statistically significant values of total passenger trips.
 
 ::: panel-tabset
 ## 5.3.1 Weekday Morning Peak
@@ -822,8 +821,7 @@ tm_shape(lisa_4) +
 
 In the code chunk below, tmap functions are used to prepare a choropleth map by using value in the **p_ii_sim** field
 
-We will visualize solely the **statistically significant** local Moran's I values (**p_ii_sim < 0.05**) through the subsequent code snippet. 
-
+We will visualize solely the **statistically significant** local Moran's I values (**p_ii_sim \< 0.05**) through the subsequent code snippet.
 
 ::: panel-tabset
 ## 5.4.1 Weekday Morning Peak
@@ -900,7 +898,6 @@ tm_shape(lisa_4) +
 
 In this visualisation, LISA categorises each region into one of four groups:
 
-
 -   High-High indicates grids with high number of origin trips located next to other grids with high number of origin trips
 
 -   Low-High indicates grids with low number of origin trips located next to other grids with high number of origin trips
@@ -909,25 +906,25 @@ In this visualisation, LISA categorises each region into one of four groups:
 
 -   Low-Low indicates grids with low number of origin trips located next to other grids with low number of origin trips
 
-
 ::: panel-tabset
 ## 5.5.1 Weekday Morning Peak
 
 In this visualisation for Weekday Morning Peak, some observations were found:
 
--   High-High regions were found throughout parts of North-East, North, Central and West, except South. 
+-   High-High regions were found throughout parts of North-East, North, Central and West, except South.
 
-  -   High-High indicates grids with high number of origin trips located next to other grids with high number of origin trips
-  
-  -   These spots also seem to be nearby each other in their respective regions, seemingly signifying a hub. 
+-   High-High indicates grids with high number of origin trips located next to other grids with high number of origin trips
+
+-   These spots also seem to be nearby each other in their respective regions, seemingly signifying a hub.
 
 -   Low-High regions are few in existence, with about 1 in each subzone.
 
-  -   Low-High indicates grids with low number of origin trips located next to other grids with high number of origin trips
+-   Low-High indicates grids with low number of origin trips located next to other grids with high number of origin trips
 
 -   High-Low regions are few in existence, with about 1 in each subzone. High-Low regions could signify
 
-  -   High-Low indicates grids with high number of origin trips located next to other grids with low number of origin trips
+-   High-Low indicates grids with high number of origin trips located next to other grids with low number of origin trips
+
 ```{r}
 #| code-fold: true
 #| code-summary: "Show the code"

@@ -24,8 +24,6 @@ pacman::p_load(tmap, sf, sp, DT,
                ggpubr, units, tidyverse)
 ```
 
-
-
 ```{r}
 mpsz <- st_read(dsn = "data/geospatial",
                    layer = "MPSZ-2019") %>%
@@ -44,8 +42,8 @@ head(dist, n=c(10, 10))
 
 ```
 
-
 ### 16.5.3 Labelling column and row heanders of a distance matrix
+
 ```{r}
 sz_names <- mpsz$SUBZONE_C
 colnames(dist) <- paste0(sz_names)
@@ -53,9 +51,6 @@ rownames(dist) <- paste0(sz_names)
 
 
 ```
-
-
-
 
 ```{r}
 distPair <- melt(dist) %>%
@@ -66,8 +61,8 @@ head(distPair, 10)
 
 ```
 
-
 ### 16.5.5 Updating intra-zonal distances
+
 In this section, we are going to append a constant value to replace the intra-zonal distance of 0.
 
 First, we will select and find out the minimum value of the distance by using summary().
@@ -78,9 +73,7 @@ distPair %>%
   summary()
 ```
 
-
-Next, a constant distance value of 50m is added into intra-zones distance.
-> 50 is derived from approximately minimum of 173.8 (found out earlier in summary statistics) divided by 2. Note : *Intra-zone
+Next, a constant distance value of 50m is added into intra-zones distance. \> 50 is derived from approximately minimum of 173.8 (found out earlier in summary statistics) divided by 2. Note : \*Intra-zone
 
 ```{r}
 distPair$dist <- ifelse(distPair$dist == 0,
@@ -89,8 +82,6 @@ distPair %>%
   summary()
 ```
 
-
-
 ```{r}
 distPair <- distPair %>%
   rename(orig = Var1,
@@ -98,8 +89,6 @@ distPair <- distPair %>%
 
 write_rds(distPair, "data/rds/distPair.rds") 
 ```
-
-
 
 ## 16.6 Preparing flow data
 
@@ -123,6 +112,39 @@ flow_data$offset <- ifelse(
   flow_data$ORIGIN_SZ == flow_data$DESTIN_SZ, 
   0.000001, 1)
 ```
+
+
+### 16.6.2 Combining passenger volume data with distance value
+Before we can join flow_data and distPair, we need to convert data value type of ORIGIN_SZ and DESTIN_SZ fields of flow_data dataframe into factor data type.
+
+flow_data$ORIGIN_SZ <- as.factor(flow_data$ORIGIN_SZ)
+flow_data$DESTIN_SZ <- as.factor(flow_data$DESTIN_SZ)
+
+Now, left_join() of dplyr will be used to flow_data dataframe and distPair dataframe. The output is called flow_data1.
+
+flow_data1 <- flow_data %>%
+  left_join (distPair,
+             by = c("ORIGIN_SZ" = "orig",
+                    "DESTIN_SZ" = "dest"))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
