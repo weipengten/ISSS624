@@ -1,0 +1,130 @@
+---
+title: "In-class Exercise 3"
+date-modified: "last-modified"
+format: html
+execute: 
+  echo: true
+  eval: true
+  warning: false
+  
+highlight-style: github
+code:
+  style: "color: red;"
+---
+
+## Overview
+
+This in-class introduces an alternative R package to spdep package you used in Hands-on Exercise 6. The package is called [**sfdep**](https://sfdep.josiahparry.com/index.html). According to Josiah Parry, the developer of the package, "sfdep builds on the great shoulders of **spdep** package for spatial dependence. sfdep creates an sf and tidyverse friendly interface to the package as well as introduces new functionality that is not present in spdep. sfdep utilizes list columns extensively to make this interface possible."
+
+## Getting started
+
+```{r}
+pacman::p_load(tmap, sf, sp, DT,
+               performance, reshape2,
+               ggpubr, units, tidyverse)
+```
+
+
+
+```{r}
+mpsz <- st_read(dsn = "data/geospatial",
+                   layer = "MPSZ-2019") %>%
+  st_transform(crs = 3414)
+
+mpsz_sp <- as(mpsz, "Spatial")
+mpsz_sp
+```
+
+```{r}
+dist <- spDists(mpsz_sp, 
+                longlat = FALSE)
+head(dist, n=c(10, 10))
+
+
+
+```
+
+
+### 16.5.3 Labelling column and row heanders of a distance matrix
+```{r}
+sz_names <- mpsz$SUBZONE_C
+colnames(dist) <- paste0(sz_names)
+rownames(dist) <- paste0(sz_names)
+
+
+```
+
+
+
+
+```{r}
+distPair <- melt(dist) %>%
+  rename(dist = value)
+head(distPair, 10)
+
+
+
+```
+
+
+### 16.5.5 Updating intra-zonal distances
+In this section, we are going to append a constant value to replace the intra-zonal distance of 0.
+
+First, we will select and find out the minimum value of the distance by using summary().
+
+```{r}
+distPair %>%
+  filter(dist > 0) %>%
+  summary()
+```
+
+
+Next, a constant distance value of 50m is added into intra-zones distance.
+> 50 is derived from approximately minimum of 173.8 (found out earlier in summary statistics) divided by 2. Note : *Intra-zone
+
+```{r}
+distPair$dist <- ifelse(distPair$dist == 0,
+                        50, distPair$dist)
+distPair %>%
+  summary()
+```
+
+
+
+```{r}
+distPair <- distPair %>%
+  rename(orig = Var1,
+         dest = Var2)
+
+write_rds(distPair, "data/rds/distPair.rds") 
+```
+
+
+
+## 16.6 Preparing flow data
+
+```{r}
+od_data <- read_rds("data/rds/od_data.rds")
+
+flow_data <- od_data %>%
+  group_by(ORIGIN_SZ, DESTIN_SZ) %>% 
+  summarize(TRIPS = sum(MORNING_PEAK)) 
+
+head(flow_data, 10)
+```
+
+### 16.6.1 Separating intra-flow from passenger volume df
+
+```{r}
+flow_data$FlowNoIntra <- ifelse(
+  flow_data$ORIGIN_SZ == flow_data$DESTIN_SZ, 
+  0, flow_data$TRIPS)
+flow_data$offset <- ifelse(
+  flow_data$ORIGIN_SZ == flow_data$DESTIN_SZ, 
+  0.000001, 1)
+```
+
+
+
+
+

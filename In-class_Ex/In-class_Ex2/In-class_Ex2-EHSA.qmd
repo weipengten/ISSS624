@@ -1,0 +1,149 @@
+---
+title: "In-class_Exercise 2"
+date-modified: "last-modified"
+format: html
+execute: 
+  echo: true
+  eval: true
+  warning: false
+  
+highlight-style: github
+code:
+  style: "color: red;"
+---
+
+## Getting Started
+
+### Installing and Loading the R Package
+
+Four packages will be used for this in-class exercise; they are sf, sfdep, tmap, tidyverse.
+
+```{r}
+pacman::p_load(sf, sfdep, tmap, tidyverse, plotly, tidyverse, knitr)
+```
+
+## The Data
+
+Two data sets will be used in this hands-on exercise, they are: - Hunan county boundary layer. This is a geospatial data set in ESRI shapefile format.
+
+-   Hunan_2012.csv: This csv file contains selected Hunan's local development indicators in 2012.
+
+### Importing geospatial data
+
+```{r}
+hunan = st_read(dsn = 'data/geospatial',
+             layer = 'Hunan')
+```
+
+### Importing Attribute tavle
+
+```{r}
+hunan2012 = read_csv('data/aspatial/Hunan_2012.csv')
+```
+
+```{r}
+GDPPC = read_csv('data/aspatial/Hunan_GDPPC.csv')
+```
+
+### Performing relational join
+
+```{r}
+hunan_GDPPC <- left_join(hunan,hunan2012) %>%
+  select(1:4,7,15)
+```
+
+::: callout-important In order to retain the geospatial propertiese, the left data frame must be the sf dataframe
+
+## Deriving Contiguity Spatial Weights: Queen's method
+
+```{r}
+wm_q <- hunan_GDPPC %>%
+  mutate(nb = st_contiguity(geometry),
+         wt = st_weights(nb,
+                         style = "W"),
+         .before = 1)
+```
+
+## Computing local Moran's I
+
+In this section, you will learn how to compute Local Moran's I of GDPPC at county level by using local_moran() of sfdep package.
+
+```{r}
+lisa <- wm_q %>%
+  mutate(local_moran = local_moran(
+    GDPPC, nb, wt, nsim =99),
+    .before =1) %>%
+  unnest(local_moran)
+```
+
+The output of *localmoran()* is a sf data.frame which returns a matrix of values whose columns are:
+
+-   Ii: the local Moran's I statistics
+
+-   E.Ii: the expectation of local moran statistic under the randomisation hypothesis
+
+-   Var.Ii: the variance of local moran statistic under the randomisation hypothesis
+
+-   Z.Ii:the standard deviate of local moran statistic
+
+-   Pr(): the p-value of local moran statistic
+
+## Creating a Time Series Cube
+
+I
+
+```{r}
+GDPPC_st <- spacetime(GDPPC, hunan,
+                      .loc_col = "County",
+                      .time_col = "Year")
+```
+
+```{r}
+is_spacetime_cube(GDPPC_st)
+is_spacetime_cube(GDPPC)
+```
+
+```{r}
+GDPPC_nb <- GDPPC_st %>%
+  activate("geometry") %>%
+  mutate(nb = include_self(st_contiguity(geometry)),
+         wt = st_inverse_distance(nb , geometry,
+                                  scale=1,
+                                  alpha =1),
+         .before = 1)%>%
+  set_nbs("nb")%>%
+  set_wts("wt")
+```
+
+## Computing Gi\*
+
+```{r}
+gi_stars <- GDPPC_nb %>%
+  group_by(Year) %>%
+  mutate(gi_star = local_gstar_perm(
+    GDPPC , nb, wt)) %>%
+  tidyr::unnest(gi_star)
+```
+
+p \<- ggplot(data =cbg, aes(x = Year, y = gi_star)) + geom_line() + theme_light()
+
+ggplotly(p)
+
+## Performing Emerging Hotspot Analysis
+
+```{r}
+ehsa <- emerging_hotspot_analysis(
+  x = GDPPC_st,
+  .var ="GDPPC",
+  k =1,
+  nsim =99
+)
+
+
+```
+
+```{r}
+#hunan_ehsa <- left_join(hunan,ehsa)
+```
+
+ehsa_sig \<- hunan_ehsa %\>% filter(p_value \< 0.05) tmap_mode("plot") tm_shape(human_ehsa) + tm_polygons() + tm_borders(alpha =0.5) + tm_shape(ehsa_sig) + tm_fill("classification") + tm_borders(alpha =0.4)
