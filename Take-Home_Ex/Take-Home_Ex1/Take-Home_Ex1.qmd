@@ -276,6 +276,8 @@ hexagon_sf <- read_rds("data/rds/hexagon_sf.rds")
 
 We can also do a visualisation to analyze the distribution of busstops. We specify break points at 0,1,2,3,4 and 5
 
+From the map below, it is obvious that most hexagons have 1 or 2 bus stops in their grid with some having 4 or 5 bus stops. There is approximately one 'cluster' that are close to each other and having 4 or 5 bus stops in each region in North, East, South, West.
+
 ```{r}
 #| code-fold: true
 #| code-summary: "Show the code"
@@ -308,21 +310,43 @@ A few notable findings were:
 
 -   At the far East, bus stops are scarce around Changi Airport
 
+    *- "grid_id" = 22027 is an extreme outlier, we will need to drop it*
+
 -   Towards the middle, we have Paya Lebar Airbase
 
 -   In the middle, we have the Central Water Catchment
 
 -   A standalone bus stop in Sentosa Island
 
--   A few bus stops in Johor are surprisingly in our dataset too
+    *- "grid_id" = 11471 is a potential outlier and should be considered for exclusion*
 
--   Other than those mentioned above, the rest of the bus stops seem to be spread out evenly
+-   A few bus stops in Johor are surprisingly in our dataset too and in
+
+    *- "grid_id" = 7068 is an extreme outlier, we will need to drop it.*
+
+    *- "grid_id" for 8113,8237,8351,8485 are potential outliers as well*
+
+-   Other than those mentioned above, the positioning of the rest of the bus stops seem to be acceptable and will not skew our dataset too much.
+
+### Data Cleaning
+Hence, let's proceed straight to dropping these data that will likely cause problems for our analysis. After deeper consideration, we decided that we should drop grid_ids for 22027, 11471 and 7068
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+# Combine Busstop and Hexagon
+hexagon_sf <- hexagon_sf %>%
+  filter(!grid_id %in% c(22027, 11471, 7068))
+```
+
 
 ## Combining the Datasets
 
 We needed to perform aggregation of passenger trips by Hexagon instead of Origin Bus Stop, hence we need to first integrate bus stop data and the hexagon dataset.
 
 Next, we sum up the total passenger trips group by each hexagon grid as ORIGIN_GRID for the 4 dataframes seperately to get the resulting tibble dataframes.
+
+Firstly, we need to integrate the busstop dataset with the hexagon dataset before merging with the origin data.
 
 ```{r}
 #| code-fold: true
@@ -331,7 +355,61 @@ Next, we sum up the total passenger trips group by each hexagon grid as ORIGIN_G
 busstop_hexagon <- st_intersection(busstop, hexagon_sf) %>%
   select(BUS_STOP_N, grid_id) %>%
   st_drop_geometry
+```
 
+However, it is found that there were duplicates:
+
+**- Some bus stops were found to be in multiple grids, this is illogical and should be dropped from analysis.**
+
+```         
+-   Example: BUS_STOP 250559 appeared both in grid 4 and 128
+```
+
+**- However it is also found out that are some duplicate entries of bus stops despite showing the same grid_id, this could lead to double counting**
+
+```         
+-   Example: BUS_STOP 22501 appeared both with the same grid as 4796
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+duplicate <- busstop_hexagon %>%
+  group_by(BUS_STOP_N) %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+Thus, the following preprocessing steps needs to be done:
+
+-   filter out bus stops that have multiple grid_ids
+
+-   keep only unique rows
+
+The output now shows that we have successful dealt with duplicates and erroneous data from the integration .
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+busstop_hexagon <- busstop_hexagon %>%
+  group_by(BUS_STOP_N) %>%
+  filter(n_distinct(grid_id)==1) %>%
+  ungroup()
+
+busstop_hexagon <- busstop_hexagon %>%
+  distinct(BUS_STOP_N , grid_id, .keep_all = TRUE )
+
+duplicate <- busstop_hexagon %>%
+  group_by(BUS_STOP_N) %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+```{r}
 
 weekday_morning_peak_join_list <- left_join(weekday_morning_peak , busstop_hexagon,
             by = c("ORIGIN_PT_CODE" = "BUS_STOP_N")) %>%
@@ -513,9 +591,13 @@ ggplot(combined_density, aes(x = factor(period), y = trips_per_busstop, fill = f
 
 ### General Observations across all 4 interval classifications
 
--   It is observed that the stretch of bus stops along Lim Chu Kang has few to none origin trips which is understandable as that's where the cemetery is and more convenient to take private transport
+-   The bus stops along Lim Chu Kang exhibit minimal to no origin trips on both weekdays and weekends. This can be attributed to the presence of a cemetery in that area, making it more practical for individuals to use private transportation.
 
--   
+-   Additionally, along the eastern coast, there are several bus stops without origin trips on weekdays. However, the situation changes on weekends and holidays, although the overall volume remains low. It is advisable to consider adjusting the bus schedule in that region for weekdays. A similar pattern is observed for the islands in the North-West..
+
+-   Origin Trips for a few bus stops near the customs remain high through weekdays and wekends. Also, one bus stop in Johor is consistently high in origin trips.
+
+-   In central areas, origin trips are not high during weekday mornings but are high during weekday afternoons. This is probably due to residential planning by the URA where residents travel from the other regions to the central and business districts. However, it is qute interesting that orgin trips are high during weekend/holiday mornings.
 
 ::: panel-tabset
 ## Weekday Morning Peak
@@ -542,10 +624,6 @@ tm_shape(weekday_morning_peak_join_geometry)+
   tm_grid(alpha =0.2)+
   tmap_style("natural")
 ```
-
-### Observations
-
--   It is observed that the stretch of bus stops along Lim Chu Kang has few to none origin trips which
 
 ## Weekday Afternoon Peak
 
@@ -626,15 +704,12 @@ tm_shape(weekend_evening_peak_join_geometry)+
 
 Due to the use of hexagon grids, we had many empty grids and this proves difficult to derive ~~contiguity weights~~. Hence, we attempted to derive distance weights instead
 
-~~Fixed distance weight~~ matrix is also inappropriate when there is an uneven distribution of neighbors, adaptive distance weights were considered instead.
+Fixed distance weight matrix was used in deriving the weights and neighbors.
 
 ### 5.1 Deriving adaptive distance weights
 
-In this section, we will derive adaptive spatial weights by using the code chunk below.
+The summary statistics report below shows that the maximum nearest neighbour distance is 901.4m. By using a threshold value of 902m will ensure that each area will have at least one neighbour.
 
-We use k-nearest neighbors to decide the numbers of neighbors..
-
-When considering the value for k... Average neighbor count is likely to be 1 because **Min**, **Median**, **Mean**, and **75th percentile** are all 250 part. We set **k=1** when generating the weights later.
 
 ```{r}
 #| code-fold: true
@@ -645,6 +720,8 @@ dists <- unlist(st_nb_dists(geo, nb))
 summary(dists)
 ```
 
+Now we will go ahead to compute the fixed distance weights by using the code chunk below.
+
 The use of **.allow_zero = TRUE** option is to assign the value of 0 to rows with missing values for TOT_TRIPS as missing values will create problems for our analysis later
 
 ```{r}
@@ -653,8 +730,8 @@ The use of **.allow_zero = TRUE** option is to assign the value of 0 to rows wit
 
 wm_q_1 <- weekday_morning_peak_join_geometry %>%
   mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0), 
-         nb = st_knn(hexagon,
-                     k=1),
+         nb = st_dist_band(hexagon,
+                           upper = 902),
          wt = st_weights(nb,
                          style = "W",
                          allow_zero = TRUE),
@@ -662,18 +739,18 @@ wm_q_1 <- weekday_morning_peak_join_geometry %>%
 
 
 wm_q_2 <- weekday_afternoon_peak_join_geometry %>%
-  mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0), 
-         nb = st_knn(hexagon,
-                     k=1),
+  mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0),  
+         nb = st_dist_band(hexagon,
+                           upper = 902),
          wt = st_weights(nb,
                          style = "W",
                          allow_zero = TRUE),
          .before = 1) 
 
 wm_q_3 <- weekend_morning_peak_join_geometry %>%
-  mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0), 
-         nb = st_knn(hexagon,
-                     k=1),
+  mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0),  
+         nb = st_dist_band(hexagon,
+                           upper = 902),
          wt = st_weights(nb,
                          style = "W",
                          allow_zero = TRUE),
@@ -681,9 +758,9 @@ wm_q_3 <- weekend_morning_peak_join_geometry %>%
 
 
 wm_q_4 <- weekend_evening_peak_join_geometry %>%
-  mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0), 
-         nb = st_knn(hexagon,
-                     k=1),
+  mutate(TOT_TRIPS = replace_na(TOT_TRIPS, 0),  
+         nb = st_dist_band(hexagon,
+                           upper = 902),
          wt = st_weights(nb,
                          style = "W",
                          allow_zero = TRUE),
