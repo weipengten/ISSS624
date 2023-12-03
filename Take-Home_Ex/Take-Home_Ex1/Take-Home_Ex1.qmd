@@ -203,6 +203,8 @@ weekend_evening_peak <- read_rds("data/rds/weekend_evening_peak.rds")
 
 ```
 
+In the code above, we have did a summation of Origin trips , grouped by the origin bus stop number for the 4 classifications through filtering for weekdays from weekends and by the stated time bins.
+
 We save our processed data into .rds data format files using the `write_rds()` of **readr** package. The output file is saved in *rds* sub-folder. We do this to reduce the loading time and more importantly, we can avoid uploading the large raw files onto GitHub.
 
 ## Bus Stop Location
@@ -229,7 +231,11 @@ summary(busstop)
 
 ### Create Hexagon Dataset from busstop
 
-Next we proceed to fulfill our requirement of preparing a hexagon dataset called **hexagon** and convert it into a sf dataframe called **hexagon_sf** :
+Next we proceed to fulfill our requirement of preparing a hexagon dataset with specified cell dimensions of 250 by 250 units called **hexagon** using the **st_make_grid** function from the sf package.
+
+We convert it into a sf dataframe called **hexagon_sf** using the **st_sf** function of sf package.  
+
+The code also adds a new variable/column called "grid_id" to the sf object. The "grid_id" values are assigned incrementally, starting from 1 and corresponding to the order of the hexagons in the grid. This step essentially assigns a unique identifier to each hexagon in the grid, facilitating further spatial analysis or mapping.
 
 ```{r}
 #| code-fold: true
@@ -342,11 +348,8 @@ hexagon_sf <- hexagon_sf %>%
 
 ## Combining the Datasets
 
-We needed to perform aggregation of passenger trips by Hexagon instead of Origin Bus Stop, hence we need to first integrate bus stop data and the hexagon dataset.
+We needed to perform aggregation of passenger trips by Hexagon instead of Origin Bus Stop, hence we need to first integrate bus stop data and the hexagon dataset using the **st_intersection** function from the sf package. The intersection operation retains only the spatial elements (points) that overlap between the original bus stop locations and the hexagonal grid.The resulting busstop_hexagon dataset contains information about which hexagon grid each bus stop is located in.
 
-Next, we sum up the total passenger trips group by each hexagon grid as ORIGIN_GRID for the 4 dataframes seperately to get the resulting tibble dataframes.
-
-Firstly, we need to integrate the busstop dataset with the hexagon dataset before merging with the origin data.
 
 ```{r}
 #| code-fold: true
@@ -409,6 +412,9 @@ duplicate <- busstop_hexagon %>%
 duplicate
 ```
 
+
+Next, we sum up the total passenger trips group by each hexagon grid as ORIGIN_GRID for the 4 dataframes seperately to get the resulting tibble dataframes.
+
 ```{r}
 
 weekday_morning_peak_join_list <- left_join(weekday_morning_peak , busstop_hexagon,
@@ -443,7 +449,10 @@ weekend_evening_peak_join_list <- left_join(weekend_evening_peak , busstop_hexag
 
 ```
 
-After that is done, we have to join back with our sf dataset:
+After that is done, we have to join back with our sf dataset using grid_id.
+
+This code chunk below performs several operations to analyze the total number of trips (TOT_TRIPS) during weekday morning peak hours based on the origin bus stop and its corresponding hexagonal grid instead of its previous bus stop number we are using.
+
 
 ```{r}
 #| code-fold: true
@@ -597,7 +606,7 @@ ggplot(combined_density, aes(x = factor(period), y = trips_per_busstop, fill = f
 
 -   Origin Trips for a few bus stops near the customs remain high through weekdays and wekends. Also, one bus stop in Johor is consistently high in origin trips.
 
--   In central areas, origin trips are not high during weekday mornings but are high during weekday afternoons. This is probably due to residential planning by the URA where residents travel from the other regions to the central and business districts. However, it is qute interesting that orgin trips are high during weekend/holiday mornings.
+-   In central areas, origin trips are not high during weekday mornings but are high during weekday afternoons. This is probably due to residential planning by the URA where residents travel from the other regions to the central and business districts.
 
 ::: panel-tabset
 ## Weekday Morning Peak
@@ -699,6 +708,17 @@ tm_shape(weekend_evening_peak_join_geometry)+
 :::
 
 ## 5. Local Indicators of Spatial Association (LISA) Analysis
+
+Local Indicators of Spatial Association (LISA) Analysis:
+
+Local Indicators of Spatial Association (LISA) is a statistical technique used in spatial analysis to identify and assess spatial patterns of clustering or dispersion within a geographical dataset. LISA analysis helps to uncover local patterns of spatial autocorrelation, providing insights into whether similar values tend to cluster together or if there are areas with dissimilar values.
+
+LISA analysis is based on the concept of spatial autocorrelation, which measures the degree to which neighboring locations are similar or dissimilar in terms of a particular variable. (In Our case, it is Origin Passenger Trips)
+
+Two key LISA statistics are Moran's I and the associated p-value,
+for each spatial unit (hexagon grid in our case) to determine if they are part of a significant cluster, outlier, or exhibit no significant pattern.
+
+Local Moran's I identifies clusters by categorizing each unit as High-High (high value surrounded by high values), Low-Low (low value surrounded by low values), High-Low (high value surrounded by low values), or Low-High (low value surrounded by high values).
 
 ***- Decision-making process***
 
@@ -903,6 +923,22 @@ We will visualize solely the **statistically significant** local Moran's I value
 ::: panel-tabset
 ## 5.4.1 Weekday Morning Peak
 
+Comparing local Moran's I together with its p_ii_sim values, a few observations were revealed:
+
+-   There are clusters near customs and throughout most of west area. They are all statistically significant.
+
+-   Clusters and dispersions found in the South / Central are mostly not statistically significant and should be ignored.
+
+-   There are both many clusters and dispersions found in Bedok, Tampines, Pasir Ris and Changi that are found to be statistically significant. However, not so much for other parts of East.
+
+-   Clusters and Dispersions found in North east and North are also statistically significant.
+
+These Clusters found seem to match our expectations as they are within residential zones. However, this is possible also because of bus interchanges and the wider options of buses avaliable near these bus interchanges. 
+
+What about the dispersion that we are observing? It is easy to dismiss that. However they tend to happen around those clusters found. This can actually be explained with the fact that are *OTHER* options other than taking buses such as a little bit of walk or.... *Cycling!!!* as a form of commuting. 
+
+**This trend may not be immediately apparent to individuals who don't utilize public transportation or to foreigners. However, it's becoming increasingly common for Singaporeans to use personal transport, such as bicycles, to reach bus interchanges instead of waiting for buses directly at their residences. This choice is driven by the realization that cycling to the bus interchange can be a more time-efficient option. The areas surrounding bus interchanges often face congestion with numerous bus stops and traffic lights, turning what should be a short journey into a lengthy one.**
+
 ```{r}
 #| code-fold: true
 #| code-summary: "Show the code"
@@ -919,6 +955,14 @@ tm_shape(lisa_1) +
 ```
 
 ## 5.4.2 Weekday Afternoon Peak
+
+There are few dispersions this time round and more clusters found instead.
+
+Most of previously residential areas identified are found to not display any statistically significant patterns, other than some parts around tampines and north east which could be hubs designated by the government.
+
+Many statistically significant clusters are found around west region which is also an industrial region.
+
+Central business district areas do not exhibit any significant patterns, it seems most office workers do not take buses home but the MRT instead.
 
 ```{r}
 #| code-fold: true
@@ -937,6 +981,12 @@ tm_shape(lisa_2) +
 
 ## 5.4.3 Weekend Morning Peak
 
+It seems there are more dispersions during mornings peak hours even for weekends/holidays.
+
+There are less clusters as compared to weekdays. The most significant clusters are those found around Bugis and Lavender. 
+
+Clusters found near NUS are statistically significant, it is unsure if it is due to the school itself.
+
 ```{r}
 #| code-fold: true
 #| code-summary: "Show the code"
@@ -953,6 +1003,12 @@ tm_shape(lisa_3) +
 ```
 
 ## 5.4.4 Weekend Afternoon Peak
+
+There are very few dispersions this time round, with three in Johor, this is not surprising as any Singapore would understand that most won't choose that time to travel back to Singapore and this data only record trips between Singapore bus stops and does not include trips not under SBS.
+
+More clusters are shown and are quite concentrated as compared to weekdays.
+
+
 
 ```{r}
 #| code-fold: true
@@ -971,7 +1027,7 @@ tm_shape(lisa_4) +
 ```
 :::
 
-### 5.5 Visualising LISA map
+## 6 Visualising LISA map
 
 In this visualisation, LISA categorises each region into one of four groups:
 
@@ -984,23 +1040,18 @@ In this visualisation, LISA categorises each region into one of four groups:
 -   Low-Low indicates grids with low number of origin trips located next to other grids with low number of origin trips
 
 ::: panel-tabset
-## 5.5.1 Weekday Morning Peak
+## 6.1 Weekday Morning Peak
 
 In this visualisation for Weekday Morning Peak, some observations were found:
 
--   High-High regions were found throughout parts of North-East, North, Central and West, except South.
+-   High-High regions were found throughout parts of North-East, North-West, Central and West, except South. These spots also seem to be nearby each other in their respective regions, seemingly signifying hubs.
 
--   High-High indicates grids with high number of origin trips located next to other grids with high number of origin trips
+-   Low-High regions are few in existence and happened to be near High-High regions
 
--   These spots also seem to be nearby each other in their respective regions, seemingly signifying a hub.
+-   High-Low regions are almost none.
 
--   Low-High regions are few in existence, with about 1 in each subzone.
+-   Low-Low regions happened to be found near the borders of Singapore mostly. They coincide with non-residential areas like changi airport Tuas and near cemetries.
 
--   Low-High indicates grids with low number of origin trips located next to other grids with high number of origin trips
-
--   High-Low regions are few in existence, with about 1 in each subzone. High-Low regions could signify
-
--   High-Low indicates grids with high number of origin trips located next to other grids with low number of origin trips
 
 ```{r}
 #| code-fold: true
@@ -1019,7 +1070,15 @@ tm_shape(lisa_sig) +
   tmap_style("albatross")
 ```
 
-## 5.5.2 Weekday Afternoon Peak
+## 6.2 Weekday Afternoon Peak
+
+High-High and High-Low regions are few here and definitely much less than during Weekday Morning Peak.
+
+There are three clusters of High-High regions (Jurong west, Woodlands, Bedok), with some Low-High regions around.. 
+
+Low-Low regions are found in Tuas Industrial are and throughout parts of Singapore
+
+Most Residential areas show no patterns.
 
 ```{r}
 #| code-fold: true
@@ -1039,7 +1098,13 @@ tm_shape(lisa_sig) +
 
 ```
 
-## 5.5.3 Weekend Morning Peak
+## 6.3 Weekend Morning Peak
+
+More High-High clusters are found with the previous three High-High clusters remaining strong for (Jurong west, Woodlands, Tampines).
+In addition to those three, are additional clusters found around Ang Mo Kio, Toa Payoh, Bedok and Bugis.
+
+
+Low-Low areas are found near Tuas and Changi Airport again and the stretch along cemeteries in Lim Chu Kang
 
 ```{r}
 #| code-fold: true
@@ -1059,7 +1124,9 @@ tm_shape(lisa_sig) +
 
 ```
 
-## 5.5.4 Weekend Afternoon Peak
+## 6.4 Weekend Afternoon Peak
+
+The patterns for this section seems almost similar to Weekend Morning Peak, most clusters remain but shows less activity compared to its morning.
 
 ```{r}
 #| code-fold: true
