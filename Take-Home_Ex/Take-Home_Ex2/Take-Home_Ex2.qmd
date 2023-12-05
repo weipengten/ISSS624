@@ -129,29 +129,36 @@ However, it also has spatial attributes. Hence, we performed the following steps
 #| code-fold: true
 #| code-summary: "Show the code"
 wpdx_nga$Geometry = st_as_sfc(wpdx_nga$new_georeferenced_column_)
-wpdx_nga <- st_sf(wpdx_nga, crs=4326)
+wpdx_nga <- st_sf(wpdx_nga, crs=26391)
 st_geometry(wpdx_nga)
 write_rds(wpdx_nga, "data/rds/wpdx_nga.rds")
 weekday_morning_peak <- read_rds("data/rds/wpdx_nga.rds")
 ```
 The Geometry column we derived earlier is confirmed to be of POINT type with XY dimension, without a third dimension.
 
-CRS is in WGS84, we do not perform transformation to Projected CRS for now as st_intersects() only works properly on Geodetic CRS instead of Projected CRS.
-
 ## Geospatial Data
 
-**nga** is a geospatial dataset 
+**nga** is a geospatial dataset.
+
+We will be using the **st_read** function of the sf package. The data is then geo-referenced to Projected Coordinate Systems of Nigeria (EPSG: 26391)
 
 ```{r}
 nga <- st_read(dsn = "data/geospatial",
-               layer = "geoBoundaries-NGA-ADM2",
-               crs = 4326) %>%
+               layer = "geoBoundaries-NGA-ADM2")%>%
+  st_transform(crs = 26391)%>%
   select(shapeName)
 
 
 write_rds(nga, "data/rds/nga.rds")
 nga <- read_rds("data/rds/nga.rds")
 ```
+It is checked that the data have been transformed properly from output below:
+
+```{r}
+st_geometry(nga)
+st_crs(nga)
+```
+
 :::
 
 ## 2. Data Cleaning
@@ -162,7 +169,10 @@ nga <- read_rds("data/rds/nga.rds")
 
 ## 2.1.1 Water Point Data
 
-A brief check shows no duplcate rows
+Checking for entire duplicate rows. 
+
+> Passes first duplicate check.
+
 ```{r}
 #| code-fold: true
 #| code-summary: "Show the code"
@@ -172,6 +182,26 @@ group_by_all() %>%
   ungroup()
 duplicate
 ```
+
+Checking for dupilcate **row_id** ...
+
+> Passes second duplicate check.
+
+```{r}
+duplicates <- nga[duplicated(wpdx_nga$row_id), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the row_id column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the row_id column.\n")
+}
+
+```
+
+
+
 
 Let's check into unqiue **clean_adm2** values, we have a count of **205** unique LGA boundaries which seems to contradict what we have found in the dataset derived from [geoBoundaries](https://www.geoboundaries.org/).
 
