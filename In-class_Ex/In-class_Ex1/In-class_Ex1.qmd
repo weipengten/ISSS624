@@ -146,6 +146,40 @@ busstop <- st_read(dsn = "data/geospatial",
                    layer = "BusStop") %>%
   st_transform(crs = 3414)
 ```
+
+
+```{r}
+
+duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+
+```
+```{r}
+
+duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+
+  # Remove duplicates from the original dataframe
+  busstop <- busstop[!duplicated(busstop$BUS_STOP_N), ]
+  
+  cat("Duplicates removed from the BUS_STOP_N column.\n")
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+```
+
+
 :::
 
 The structure of `busstop` sf tibble data frame should look as below.
@@ -167,6 +201,25 @@ mpsz <- st_read(dsn = "data/geospatial",
   st_transform(crs = 3414)
 ```
 :::
+
+
+
+```{r}
+
+duplicates <- mpsz[duplicated(mpsz$SUBZONE_C), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the SUBZONE_C column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the SUBZONE_C column.\n")
+}
+
+```
+
+
+
 
 The structure of `mpsz` sf tibble data frame should look as below.
 
@@ -190,6 +243,18 @@ busstop_mpsz <- st_intersection(busstop, mpsz) %>%
   select(BUS_STOP_N, SUBZONE_C) %>%
   st_drop_geometry()
 ```
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicate <- busstop_mpsz %>%
+group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+
 
 ::: callout-note
 -   `st_intersection()` is used to perform point and polygon overly and the output will be in point sf object.

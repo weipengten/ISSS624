@@ -1,0 +1,281 @@
+---
+title: "Take Home Exercise 2 - Regionalisation of Multivariate Water Point Attributes with Non-spatially Constrained and Spatially Constrained Clustering Methods"
+date-modified: "last-modified"
+format: html
+execute: 
+  echo: true
+  eval: true
+  warning: false
+  
+highlight-style: github
+code:
+  lineNumbers: true
+  wrapLines: true
+  wrap: true
+  style: "color: black; background-color: #f0f0f0;"
+---
+
+## Overview
+
+## Objectives
+
+In this take-home exercise you are required to regionalize Nigeria by using, but not limited to the following measures:
+
+-   Total number of functional water points in LGA
+
+-   Total number of nonfunctional water points in LGA
+
+-   Percentage of functional water points
+
+-   Percentage of non-functional water points
+
+-   Percentage of main water point technology (i.e. Hand Pump)
+
+-   Percentage of usage capacity (i.e. \< 1000, \>=1000)
+
+-   Percentage of rural water points
+
+## **The Data**
+
+### **Aspatial data**
+
+For the purpose of this assignment, data from [WPdx Global Data Repositories](https://www.waterpointdata.org/access-data/) will be used. There are two versions of the data. They are: WPdx-Basic and WPdx+. You are required to use WPdx+ data set.
+
+### **Geospatial data**
+
+Nigeria Level-2 Administrative Boundary (also known as Local Government Area) polygon features GIS data will be used in this take-home exercise. The data can be downloaded either from The [Humanitarian Data Exchange](https://data.humdata.org/) portal or [geoBoundaries](https://www.geoboundaries.org/).
+
+## **The Task**
+
+The specific tasks of this take-home exercise are as follows:
+
+-   Using appropriate sf method, import the shapefile into R and save it in a simple feature data frame format. Note that there are three Projected Coordinate Systems of Nigeria, they are: EPSG: 26391, 26392, and 26303. You can use any one of them.
+
+-   Using appropriate tidyr and dplyr methods, derive the proportion of functional and non-functional water point at LGA level (i.e. ADM2).
+
+-   Combining the geospatial and aspatial data frame into simple feature data frame.
+
+-   Delineating water point measures functional regions by using conventional hierarchical clustering.
+
+-   Delineating water point measures functional regions by using spatially constrained clustering algorithms.
+
+### **Thematic Mapping**
+
+-   Plot to show the water points measures derived by using appropriate statistical graphics and choropleth mapping technique.
+
+### **Analytical Mapping**
+
+-   Plot functional regions delineated by using both non-spatially constrained and spatially constrained clustering algorithms.
+
+### Installing and loading R packages
+
+Before we get started, it is important for us to install the necessary R packages into R and launch these R packages into R environment.
+
+The R packages needed for this exercise are as follows:
+
+-   Spatial data handling
+
+    -   **sf** and **sfdep**
+
+-   Attribute data handling
+
+    -   **tidyverse** (which includes a few essential packages like ggplot2, dplyr, tidyr, readr, purrr, tibble, stringr) and **GGally**
+
+-   Choropleth mapping
+
+    -   **tmap**
+
+-   Multivariate data visualisation and analysis
+
+    -   **coorplot**, **ggpubr**, **heatmaply**, **palmerpenguins**
+
+-   Cluster analysis
+
+    -   **cluster**, **ClustGeo**, **factoextra**
+
+The code chunks below installs and launches these R packages into R environment.
+
+```{r}
+pacman::p_load(sf, sfdep, tmap, tidyverse, tmap, ClustGeo, ggpubr, cluster, factoextra, heatmaply,
+               corrplot, GGally, palmerpenguins)
+```
+
+## 1. Importing Data
+
+We will import the data as a first step before proceeding with data cleaning, data wrangling and data exploration for the following:
+
+-   **wpdx_ngaa**, a csv file with the necessary Water Point data that we are interested in,
+
+-   **nga**, a multipolygon feature layer ESRI shapefile format
+
+::: panel-tabset
+## Aspatial Data
+
+**wpdx_nga** is the data that contains the attributes of water points in Nigera that we are interested in, we can import the data simply by using the read_csv function from tidyverse package and output it as a tibble dataframe.
+
+```{r}
+wpdx_nga <- read_csv("data/aspatial/eqje-vguj.csv")
+```
+
+However, it also has spatial attributes. Hence, we performed the following steps:
+
+1.  In order to derive its spatial features represented in the **new_georeferenced_column\_**, we use the **st_as_sfc()** function of sf package to derive a new field called **Geometry**.
+
+2.  Next, **st_sf()** will be used to convert the tibble data frame into sf data frame geo-referenced to Projected Coordinate Systems of Nigeria using EPSG: 26391.
+
+3.  We save our processed data into .rds data format files using the **write_rds()** of **readr** package. The output file is saved in *rds* sub-folder. We do this to reduce the loading time and more importantly, we can avoid uploading the large raw files onto GitHub.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+wpdx_nga$Geometry = st_as_sfc(wpdx_nga$new_georeferenced_column_)
+wpdx_nga <- st_sf(wpdx_nga, crs=4326)
+st_geometry(wpdx_nga)
+write_rds(wpdx_nga, "data/rds/wpdx_nga.rds")
+weekday_morning_peak <- read_rds("data/rds/wpdx_nga.rds")
+```
+The Geometry column we derived earlier is confirmed to be of POINT type with XY dimension, without a third dimension.
+
+CRS is in WGS84, we do not perform transformation to Projected CRS for now as st_intersects() only works properly on Geodetic CRS instead of Projected CRS.
+
+## Geospatial Data
+
+**nga** is a geospatial dataset 
+
+```{r}
+nga <- st_read(dsn = "data/geospatial",
+               layer = "geoBoundaries-NGA-ADM2",
+               crs = 4326) %>%
+  select(shapeName)
+
+
+write_rds(nga, "data/rds/nga.rds")
+nga <- read_rds("data/rds/nga.rds")
+```
+:::
+
+## 2. Data Cleaning
+
+### 2.1 Dealing with Duplicates
+
+::: panel-tabset
+
+## 2.1.1 Water Point Data
+
+A brief check shows no duplcate rows
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicate <- wpdx_nga %>%
+group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+Let's check into unqiue **clean_adm2** values, we have a count of **205** unique LGA boundaries which seems to contradict what we have found in the dataset derived from [geoBoundaries](https://www.geoboundaries.org/).
+
+While **clean_adm2** seems to also provide information on LGA boundaries, it seems largely different from that the dataset which we are advised to derived LGA data from. To play safe, we **WILL NOT* rely on **clean_adm2** but rather the LGA data from geoBoundaries in **nga** dataframe
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+unique_values_1 <- unique(wpdx_nga$clean_adm2)
+length(unique_values_1)
+```
+
+**status_clean** column seems to contain the information of the status of the water points - whether it is functional or non-functional. Let's check it out by looking at the possible statuses.
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+unique_values_2 <- unique(wpdx_nga$status_clean)
+unique_values_2
+```
+
+
+
+
+
+
+
+## 2.1.1 GeoBoundaries-ADM2 Data
+
+Checking for entire dupilcate rows. 
+
+> Passes first duplicate check.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicate <- nga %>%
+group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+
+Checking for dupilcate shapeName comes up with **5** duplicates. They are 
+Surulere, Ifelodun, Irepodun, Bassa, Obi.
+
+> Fails second duplicate check.
+
+```{r}
+duplicates <- nga[duplicated(nga$shapeName), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the shapeName column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the shapeName column.\n")
+}
+
+```
+
+We remove the duplicate entries found in the list from **nga* dataframe
+and now there are no more duplicates. We have checked that again.
+```{r}
+nga <- nga[!duplicated(nga$shapeName), ]
+duplicates <- nga[duplicated(nga$shapeName), ]
+duplicates
+```
+
+
+Let's check into unqiue ADM values
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+unique_values_3 <- unique(nga$shapeName)
+length(unique_values_3)
+```
+
+
+
+
+
+::: 
+
+
+
+
+
+
+
+
+
+
+
+::: panel-tabset
+
+
+
+
+
+
+
+
+
+
+
+
+:::

@@ -9,7 +9,10 @@ execute:
   
 highlight-style: github
 code:
-  style: "color: red;"
+  lineNumbers: true
+  wrapLines: true
+  wrap: true
+  style: "color: black; background-color: #f0f0f0;"
 ---
 
 ## Overview
@@ -22,7 +25,7 @@ In this study, we first perform
 
 -   **Exploratory Spatial Data Analysis (ESDA)** to provide us an understanding of the movement patterns on a high level before proceeding to with either
 
--   **Local Indicators of Spatial Association (GLISA)**
+-   **Local Indicators of Spatial Association (LISA)**
 
 to undercover the spatial and spatio-temporal mobility patterns of public bus passengers in Singapore in detail.
 
@@ -52,8 +55,6 @@ The specific tasks of this take-home exercise are as follows:
 -   Display the LISA maps of the passengers trips generate by origin at hexagon level. The maps should only display the significant (i.e. p-value \< 0.05)
 
 -   With reference to the analysis results, draw statistical conclusions (not more than 200 words per visual).
-
-## Objective
 
 ## The Data
 
@@ -222,6 +223,47 @@ duplicate <- busstop %>%
 duplicate
 ```
 
+
+duplicate bus stops found, removing duplicates directly...
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+
+  # Remove duplicates from the original dataframe
+  busstop <- busstop[!duplicated(busstop$BUS_STOP_N), ]
+  
+  cat("Duplicates removed from the BUS_STOP_N column.\n")
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+```
+
+Checked duplicates removed successfully
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+
+```
+
+
 ```{r}
 #| eval: false
 summary(busstop)
@@ -249,6 +291,24 @@ hexagon_sf = st_sf(hexagon) %>%
   mutate(grid_id = 1:length(lengths(hexagon)))
 
 ```
+
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+duplicates <- hexagon_sf[duplicated(hexagon_sf$grid_id), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the grid_id column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the grid_id column.\n")
+}
+
+```
+
 
 ### Examine The Grid
 
@@ -360,7 +420,7 @@ busstop_hexagon <- st_intersection(busstop, hexagon_sf) %>%
   st_drop_geometry
 ```
 
-However, it is found that there were duplicates:
+However, it is found that there is still one duplicate found despite the thorough cleaning we did earlier:
 
 **- Some bus stops were found to be in multiple grids, this is illogical and should be dropped from analysis.**
 
@@ -368,11 +428,6 @@ However, it is found that there were duplicates:
 -   Example: BUS_STOP 250559 appeared both in grid 4 and 128
 ```
 
-**- However it is also found out that are some duplicate entries of bus stops despite showing the same grid_id, this could lead to double counting**
-
-```         
--   Example: BUS_STOP 22501 appeared both with the same grid as 4796
-```
 
 ```{r}
 #| code-fold: true
@@ -389,8 +444,6 @@ Thus, the following preprocessing steps needs to be done:
 
 -   filter out bus stops that have multiple grid_ids
 
--   keep only unique rows
-
 The output now shows that we have successful dealt with duplicates and erroneous data from the integration .
 
 ```{r}
@@ -401,9 +454,6 @@ busstop_hexagon <- busstop_hexagon %>%
   group_by(BUS_STOP_N) %>%
   filter(n_distinct(grid_id)==1) %>%
   ungroup()
-
-busstop_hexagon <- busstop_hexagon %>%
-  distinct(BUS_STOP_N , grid_id, .keep_all = TRUE )
 
 duplicate <- busstop_hexagon %>%
   group_by(BUS_STOP_N) %>%
