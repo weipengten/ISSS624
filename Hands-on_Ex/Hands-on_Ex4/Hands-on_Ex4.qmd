@@ -217,14 +217,14 @@ First, we will turn on the interactive mode of tmap by using the code chunk belo
 Next, the code chunks below is used to create an interactive point symbol map.
 
 ```{r}
-tmap_mode("view")
-tm_shape(mpsz_svy21)+
-  tm_polygons() +
-tm_shape(condo_resale.sf) +  
-  tm_dots(col = "SELLING_PRICE",
-          alpha = 0.6,
-          style="quantile") +
-  tm_view(set.zoom.limits = c(11,14))
+# tmap_mode("view")
+# tm_shape(mpsz_svy21)+
+#   tm_polygons() +
+# tm_shape(condo_resale.sf) +  
+#   tm_dots(col = "SELLING_PRICE",
+#           alpha = 0.6,
+#           style="quantile") +
+#   tm_view(set.zoom.limits = c(11,14))
 
 ```
 
