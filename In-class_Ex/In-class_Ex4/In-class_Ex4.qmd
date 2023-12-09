@@ -1,0 +1,90 @@
+---
+title: "In-Class Exercise 4 -"
+date-modified: "last-modified"
+format: html
+execute: 
+  echo: true
+  eval: true
+  warning: false
+  
+highlight-style: github
+code:
+  style: "color: red;"
+---
+.
+## Getting Started
+
+```{r}
+pacman::p_load(sf, httr, tmap, tidyverse, httr2)
+```
+httr, httr2 is a r package, allows us to work with html packages
+
+## Geocoding Using SLA API
+
+Work with SLA OneMap API, Search
+
+-   Client: Passes Request with names
+
+-   Server: Provides Response with X,Y coordinates
+
+
+
+```{r}
+url <- "https://www.onemap.gov.sg/api/common/elastic/search"
+
+csv <- read_csv("data/aspatial/Generalinformationofschools.csv")
+postcodes <- csv$`postal_code`
+
+found <- data.frame()
+not_found <- data.frame()
+
+for(postcode in postcodes){
+  query <- list('searchVal' =postcode, 'returnGeom'='Y','getAddrDetails'='Y','pageNum'='1')
+  res <- GET(url,query=query)
+  
+  if((content(res)$found)!=0){
+  found <-rbind(found,data.frame(content(res))[4:13])
+  } else{
+    not_found =data.frame(postcode)
+  }
+}
+
+
+```
+
+```{r}
+merged = merge(csv,found, by.x='postal_code', by.y='results.POSTAL',all=TRUE)
+               write.csv(merged, file="data/aspatial/schools.csv")
+               write.csv(not_found, file="data/aspatial/not_found.csv")
+               
+```
+
+
+              
+```{r}
+schools <- read_csv("data/aspatial/schools.csv") %>%
+  rename(latitude = "results.LATITUDE",
+         longitude = "results.LONGITUDE") %>%
+  bind_rows(data.frame(school_name = "ZHENGHUA SECONDARY SCHOOL",
+                       postal_code ="679962",
+                       latitude = 1.3887,
+                       longitude = 103.7652)) %>%
+  select(postal_code, school_name, latitude, longitude) %>%
+  drop_na()
+
+```
+
+```{r}
+schools_sf <- st_as_sf(schools,
+                       coords =c("longitude","latitude"),
+                       crs=4326) %>%
+  st_transform(crs=3414)
+```
+
+
+
+
+
+
+
+

@@ -1,5 +1,5 @@
 ---
-title: "Take Home Exercise 2 - Regionalisation of Multivariate Water Point Attributes with Non-spatially Constrained and Spatially Constrained Clustering Methods"
+title: "Take Home Exercise 2"
 date-modified: "last-modified"
 format: html
 execute: 
@@ -13,299 +13,438 @@ code:
   wrapLines: true
   wrap: true
   style: "color: black; background-color: #f0f0f0;"
+output:
+  quarto::quarto_html:
+    includes:
+      after_body: styles.css
 ---
 
-## Overview
+# **Setting the Scene**
 
-## Objectives
+What are the driving forces behind urban dwellers to weak up early in morning to commute from their home locations to their work places? What are the impact of removing a public bus service on the commuters reside along the corridor of the bus route? These and many other questions related to urban mobility are challenges faced by transport operators and urban managers.
 
-In this take-home exercise you are required to regionalize Nigeria by using, but not limited to the following measures:
+To provide answer to this question, traditionally, commuters survey will be used. However, commuters survey is a very costly, time-consuming and laborous, not to mention that the survey data tend to take a long time to clean and analyse. As a result, it is not unusual, by the time the survey report was ready, most of the information already out-of-date!
 
--   Total number of functional water points in LGA
+As city-wide urban infrastructures such as public buses, mass rapid transits, public utilities and roads become digital, the data sets obtained can be used as a framework for tracking movement patterns through space and time. This is particularly true with the recent trend of massive deployment of pervasive computing technologies such as GPS on the vehicles and SMART cards used by public transport commuters.
 
--   Total number of nonfunctional water points in LGA
+Unfortunately, this explosive growth of geospatially-referenced data has far outpaced the planner's ability to utilize and transform the data into insightful information thus creating an adverse impact on the return on the investment made to collect and manage this data.
 
--   Percentage of functional water points
+# **Motivation and Objective**
 
--   Percentage of non-functional water points
+This take-home exercise is motivated by two main reasons. Firstly, despite increasing amounts of open data available for public consumption, there has not been significant practice research carried out to show how these disparate data sources can be integrated, analysed, and modelled to support policy making decisions.
 
--   Percentage of main water point technology (i.e. Hand Pump)
+Secondly, there is a general lack of practical research to show how geospatial data science and analysis (GDSA) can be used to support decision-making.
 
--   Percentage of usage capacity (i.e. \< 1000, \>=1000)
+Hence, your task for this take-home exercise is to conduct a case study to demonstrate the potential value of GDSA to integrate publicly available data from multiple sources for building a spatial interaction models to determine factors affecting urban mobility patterns of public bus transit.
 
--   Percentage of rural water points
+# **The Data**
 
-## **The Data**
+## **Open Government Data**
 
-### **Aspatial data**
+For the purpose of this assignment, data from several open government sources will be used:
 
-For the purpose of this assignment, data from [WPdx Global Data Repositories](https://www.waterpointdata.org/access-data/) will be used. There are two versions of the data. They are: WPdx-Basic and WPdx+. You are required to use WPdx+ data set.
+-   *Passenger Volume by Origin Destination Bus Stops*, *Bus Stop Location*, *Train Station* and *Train Station Exit Point*, just to name a few of them, from [LTA DataMall](https://datamall.lta.gov.sg/content/datamall/en.html).
 
-### **Geospatial data**
+-   *Master Plan 2019 Subzone Boundary*, *HDB Property Information*, *School Directory and Information* and other relevant data from [Data.gov.sg](https://beta.data.gov.sg/).
 
-Nigeria Level-2 Administrative Boundary (also known as Local Government Area) polygon features GIS data will be used in this take-home exercise. The data can be downloaded either from The [Humanitarian Data Exchange](https://data.humdata.org/) portal or [geoBoundaries](https://www.geoboundaries.org/).
+## **Specially collected data**
 
-## **The Task**
+-   *Business*, *entertn*, *F&B*, *FinServ*, *Leisure&Recreation* and *Retails* are geospatial data sets of the locations of business establishments, entertainments, food and beverage outlets, financial centres, leisure and recreation centres, retail and services stores/outlets I compiled for urban mobility study. They are available on in the geospatial folder to Take-home Exercise 2 data folder.
 
-The specific tasks of this take-home exercise are as follows:
+-   HDB: This data set is the geocoded version of *HDB Property Information* data from data.gov. The data set is prepared using September 2021 data. If you want to prepare you own data by using the latest *HDB Property Information* provided on data.gov.sg, this [link](https://is415-msty.netlify.app/posts/2021-10-25-take-home-exercise-3/?panelset6=glimpse%28%29#geocoding-our-aspatial-data) provides a useful step-by-step guide.
 
--   Using appropriate sf method, import the shapefile into R and save it in a simple feature data frame format. Note that there are three Projected Coordinate Systems of Nigeria, they are: EPSG: 26391, 26392, and 26303. You can use any one of them.
-
--   Using appropriate tidyr and dplyr methods, derive the proportion of functional and non-functional water point at LGA level (i.e. ADM2).
-
--   Combining the geospatial and aspatial data frame into simple feature data frame.
-
--   Delineating water point measures functional regions by using conventional hierarchical clustering.
-
--   Delineating water point measures functional regions by using spatially constrained clustering algorithms.
-
-### **Thematic Mapping**
-
--   Plot to show the water points measures derived by using appropriate statistical graphics and choropleth mapping technique.
-
-### **Analytical Mapping**
-
--   Plot functional regions delineated by using both non-spatially constrained and spatially constrained clustering algorithms.
-
-### Installing and loading R packages
-
-Before we get started, it is important for us to install the necessary R packages into R and launch these R packages into R environment.
-
-The R packages needed for this exercise are as follows:
-
--   Spatial data handling
-
-    -   **sf** and **sfdep**
-
--   Attribute data handling
-
-    -   **tidyverse** (which includes a few essential packages like ggplot2, dplyr, tidyr, readr, purrr, tibble, stringr) and **GGally**
-
--   Choropleth mapping
-
-    -   **tmap**
-
--   Multivariate data visualisation and analysis
-
-    -   **coorplot**, **ggpubr**, **heatmaply**, **palmerpenguins**
-
--   Cluster analysis
-
-    -   **cluster**, **ClustGeo**, **factoextra**
-
-The code chunks below installs and launches these R packages into R environment.
+# Install R Package
 
 ```{r}
-pacman::p_load(sf, sfdep, tmap, tidyverse, tmap, ClustGeo, ggpubr, cluster, factoextra, heatmaply,
-               corrplot, GGally, palmerpenguins)
+pacman::p_load(sf, sfdep, magrittr, tidyverse, tmap, knitr, RColorBrewer, viridis)
 ```
 
-## 1. Importing Data
+# 1. Importing Data
 
 We will import the data as a first step before proceeding with data cleaning, data wrangling and data exploration for the following:
 
--   **wpdx_ngaa**, a csv file with the necessary Water Point data that we are interested in,
-
--   **nga**, a multipolygon feature layer ESRI shapefile format
+-   **PassengerVolume**, a csv file,
+-   **BusStop**, a point feature layer ESRI shapefile format
 
 ::: panel-tabset
-## Aspatial Data
+## Passenger Volume
 
-**wpdx_nga** is the data that contains the attributes of water points in Nigera that we are interested in, we can import the data simply by using the read_csv function from tidyverse package and output it as a tibble dataframe.
-
-```{r}
-wpdx_nga <- read_csv("data/aspatial/eqje-vguj.csv")
-```
-
-However, it also has spatial attributes. Hence, we performed the following steps:
-
-1.  In order to derive its spatial features represented in the **new_georeferenced_column\_**, we use the **st_as_sfc()** function of sf package to derive a new field called **Geometry**.
-
-2.  Next, **st_sf()** will be used to convert the tibble data frame into sf data frame geo-referenced to Projected Coordinate Systems of Nigeria using EPSG: 26391.
-
-3.  We save our processed data into .rds data format files using the **write_rds()** of **readr** package. The output file is saved in *rds* sub-folder. We do this to reduce the loading time and more importantly, we can avoid uploading the large raw files onto GitHub.
+**Passenger Volume** is an aspatial data, we can import the data simply by using the read_csv function from tidyverse package and output it as a tibble dataframe called `odbus`
 
 ```{r}
-#| code-fold: true
-#| code-summary: "Show the code"
-wpdx_nga$Geometry = st_as_sfc(wpdx_nga$new_georeferenced_column_)
-wpdx_nga <- st_sf(wpdx_nga, crs=26391)
-st_geometry(wpdx_nga)
-write_rds(wpdx_nga, "data/rds/wpdx_nga.rds")
-weekday_morning_peak <- read_rds("data/rds/wpdx_nga.rds")
+odbus <- read_csv("data/aspatial/origin_destination_bus_202310.csv")
 ```
-The Geometry column we derived earlier is confirmed to be of POINT type with XY dimension, without a third dimension.
 
-## Geospatial Data
+## Bus Stop Location
 
-**nga** is a geospatial dataset.
-
-We will be using the **st_read** function of the sf package. The data is then geo-referenced to Projected Coordinate Systems of Nigeria (EPSG: 26391)
+**Bus Stop** is a geospatial data in .shp file. We save it as a sf data frame called `busstop` using the **st_read** function of the sf package. The data is then geo-referenced to coordinates from the Singapore SVY21 coordinate system (EPSG: 3414)
 
 ```{r}
-nga <- st_read(dsn = "data/geospatial",
-               layer = "geoBoundaries-NGA-ADM2")%>%
-  st_transform(crs = 26391)%>%
-  select(shapeName)
+busstop <- st_read(dsn = "data/geospatial", 
+                   layer = "BusStop") %>%
+  st_transform(crs=3414)
 
-
-write_rds(nga, "data/rds/nga.rds")
-nga <- read_rds("data/rds/nga.rds")
 ```
-It is checked that the data have been transformed properly from output below:
+
+## Train Station
+
+**Train Station** is a geospatial data in .shp file. We save it as a sf data frame called `trainstation` using the **st_read** function of the sf package. The data is then geo-referenced to coordinates from the Singapore SVY21 coordinate system (EPSG: 3414)
 
 ```{r}
-st_geometry(nga)
-st_crs(nga)
+trainstation <- st_read(dsn = "data/geospatial", 
+                   layer = "RapidTransitSystemStation") %>%
+  st_transform(crs=3414)
+
 ```
 
+## Train Station Exit Point
+
+**Train Station Exit Point** is a geospatial data in .shp file. We save it as a sf data frame called `trainstationEP` using the **st_read** function of the sf package. The data is then geo-referenced to coordinates from the Singapore SVY21 coordinate system (EPSG: 3414)
+
+```{r}
+trainstationEP <- st_read(dsn = "data/geospatial", 
+                   layer = "RapidTransitSystemStation") %>%
+  st_transform(crs=3414)
+
+```
+
+## MPSZ-2019
+
+**MPSZ-2019**: This data provides the sub-zone boundary of URA Master Plan 2019. Both data sets are in ESRI shapefile format.
+
+```{r}
+mpsz <- st_read(dsn =  "data/geospatial", layer = "MPSZ-2019") %>% 
+  st_transform(crs = 3414)
+```
+
+Note st_read() function of sf package is used to import the shapefile into R as sf data frame. st_transform() function of sf package is used to transform the projection to crs 3414.
+
+## HDB
+
+**HDB**: Using geocoded version of HDB Property Information data from data.gov
+
+```{r}
+hdb <- read_csv("data/aspatial/hdb.csv")
+```
+
+## School Directory
+
+**School Directory**: Using geocoded version of HDB Property Information data from data.gov
+
+```{r}
+school <- read_csv("data/geospatial/Generalinformationofschools.csv")
+```
+
+## Specially Collected Data
+
+zz
 :::
 
-## 2. Data Cleaning
+# 2. Data Cleaning
 
-### 2.1 Dealing with Duplicates
+<!-- ::: panel-tabset \## Passenger Volume -->
 
-::: panel-tabset
+<!-- ### Data Exploration -->
 
-## 2.1.1 Water Point Data
+<!-- ```{r} -->
+<!-- #| eval=FALSE -->
+<!-- glimpse(odbus) -->
+<!-- ``` -->
 
-Checking for entire duplicate rows. 
+<!-- As we intend to utilize Bus-stop codes as our unique identifiers when joining with our other datasets, it is not advisable to have it remain as a chr datatype. In fact, we should change it to a factor datatype. -->
 
-> Passes first duplicate check.
+<!-- ```{r} -->
+<!-- odbus$ORIGIN_PT_CODE <- as.factor(odbus$ORIGIN_PT_CODE) -->
+<!-- odbus$DESTINATION_PT_CODE <- as.factor(odbus$DESTINATION_PT_CODE)  -->
+<!-- ``` -->
 
-```{r}
-#| code-fold: true
-#| code-summary: "Show the code"
-duplicate <- wpdx_nga %>%
-group_by_all() %>%
-  filter(n()>1) %>%
-  ungroup()
-duplicate
-```
+<!-- ### Checking for Duplicates -->
 
-Checking for dupilcate **row_id** ...
+<!-- There is no duplicates -->
 
-> Passes second duplicate check.
+<!-- ```{r} -->
+<!-- #| eval: false -->
+<!-- duplicate <- odbus %>% -->
+<!--   group_by_all() %>% -->
+<!--   filter(n()>1) %>% -->
+<!--   ungroup() -->
+<!-- duplicate -->
+<!-- ``` -->
 
-```{r}
-duplicates <- nga[duplicated(wpdx_nga$row_id), ]
+<!-- ### Checking for Missing Data -->
 
-# Check if there are any duplicates
-if (nrow(duplicates) > 0) {
-  cat("Duplicate values found in the row_id column.\n")
-  print(duplicates)
-} else {
-  cat("No duplicate values found in the row_id column.\n")
-}
+<!-- There is no missing data -->
 
-```
+<!-- ```{r} -->
+<!-- #| eval=FALSE -->
 
+<!-- summary(odbus) -->
+<!-- ``` -->
 
+<!-- ### Classifying Peak Hours -->
 
+<!-- With reference to the time intervals provided in the requirements, we computed the passenger trips generated by origin. The passenger trips by origin are saved in 4 dataframes based on their respective classifications namely: -->
 
-Let's check into unqiue **clean_adm2** values, we have a count of **205** unique LGA boundaries which seems to contradict what we have found in the dataset derived from [geoBoundaries](https://www.geoboundaries.org/).
+<!-- -   weekday_morning_peak -->
 
-While **clean_adm2** seems to also provide information on LGA boundaries, it seems largely different from that the dataset which we are advised to derived LGA data from. To play safe, we **WILL NOT* rely on **clean_adm2** but rather the LGA data from geoBoundaries in **nga** dataframe
-```{r}
-#| code-fold: true
-#| code-summary: "Show the code"
-unique_values_1 <- unique(wpdx_nga$clean_adm2)
-length(unique_values_1)
-```
+<!-- -   weekday_afternoon_peak -->
 
-**status_clean** column seems to contain the information of the status of the water points - whether it is functional or non-functional. Let's check it out by looking at the possible statuses.
-```{r}
-#| code-fold: true
-#| code-summary: "Show the code"
-unique_values_2 <- unique(wpdx_nga$status_clean)
-unique_values_2
-```
+<!-- -   weekend_morning_peak -->
 
+<!-- -   weekend_evening_peak -->
 
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
+<!-- weekday_morning_peak <- odbus %>% -->
+<!--   filter(DAY_TYPE == "WEEKDAY") %>% -->
+<!--   filter(TIME_PER_HOUR >= 6 & -->
+<!--            TIME_PER_HOUR <= 9) %>% -->
+<!--   group_by(ORIGIN_PT_CODE) %>% -->
+<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
 
+<!-- weekday_afternoon_peak <- odbus %>% -->
+<!--   filter(DAY_TYPE == "WEEKDAY") %>% -->
+<!--   filter(TIME_PER_HOUR >= 17 & -->
+<!--            TIME_PER_HOUR <= 20) %>% -->
+<!--   group_by(ORIGIN_PT_CODE) %>% -->
+<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
 
+<!-- weekend_morning_peak <- odbus %>% -->
+<!--   filter(DAY_TYPE == "WEEKENDS/HOLIDAY") %>% -->
+<!--   filter(TIME_PER_HOUR >= 11 & -->
+<!--            TIME_PER_HOUR <= 14) %>% -->
+<!--   group_by(ORIGIN_PT_CODE) %>% -->
+<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
 
+<!-- weekend_evening_peak <- odbus %>% -->
+<!--   filter(DAY_TYPE == "WEEKENDS/HOLIDAY") %>% -->
+<!--   filter(TIME_PER_HOUR >= 16 & -->
+<!--            TIME_PER_HOUR <= 19) %>% -->
+<!--   group_by(ORIGIN_PT_CODE) %>% -->
+<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
 
 
-## 2.1.1 GeoBoundaries-ADM2 Data
+<!-- write_rds(weekday_morning_peak, "data/rds/weekday_morning_peak.rds") -->
+<!-- weekday_morning_peak <- read_rds("data/rds/weekday_morning_peak.rds") -->
 
-Checking for entire dupilcate rows. 
+<!-- write_rds(weekday_afternoon_peak, "data/rds/weekday_afternoon_peak.rds") -->
+<!-- weekday_afternoon_peak <- read_rds("data/rds/weekday_afternoon_peak.rds") -->
 
-> Passes first duplicate check.
+<!-- write_rds(weekend_morning_peak, "data/rds/weekend_morning_peak.rds") -->
+<!-- weekend_morning_peak <- read_rds("data/rds/weekend_morning_peak.rds") -->
 
-```{r}
-#| code-fold: true
-#| code-summary: "Show the code"
-duplicate <- nga %>%
-group_by_all() %>%
-  filter(n()>1) %>%
-  ungroup()
-duplicate
-```
+<!-- write_rds(weekend_evening_peak, "data/rds/weekend_evening_peak.rds") -->
+<!-- weekend_evening_peak <- read_rds("data/rds/weekend_evening_peak.rds") -->
 
+<!-- ``` -->
 
-Checking for dupilcate shapeName comes up with **5** duplicates. They are 
-Surulere, Ifelodun, Irepodun, Bassa, Obi.
+<!-- In the code above, we have did a summation of Origin trips , grouped by the origin bus stop number for the 4 classifications through filtering for weekdays from weekends and by the stated time bins. -->
 
-> Fails second duplicate check.
+<!-- We save our processed data into .rds data format files using the `write_rds()` of **readr** package. The output file is saved in *rds* sub-folder. We do this to reduce the loading time and more importantly, we can avoid uploading the large raw files onto GitHub. -->
 
-```{r}
-duplicates <- nga[duplicated(nga$shapeName), ]
+<!-- ## Bus Stop Location -->
 
-# Check if there are any duplicates
-if (nrow(duplicates) > 0) {
-  cat("Duplicate values found in the shapeName column.\n")
-  print(duplicates)
-} else {
-  cat("No duplicate values found in the shapeName column.\n")
-}
+<!-- Passed initial checks for whole duplicate rows, however... -->
 
-```
+<!-- ```{r} -->
+<!-- #| eval: false -->
+<!-- duplicate <- busstop %>% -->
+<!--   group_by_all() %>% -->
+<!--   filter(n()>1) %>% -->
+<!--   ungroup() -->
+<!-- duplicate -->
+<!-- ``` -->
 
-We remove the duplicate entries found in the list from **nga* dataframe
-and now there are no more duplicates. We have checked that again.
-```{r}
-nga <- nga[!duplicated(nga$shapeName), ]
-duplicates <- nga[duplicated(nga$shapeName), ]
-duplicates
-```
+<!-- duplicate bus stops found, removing duplicates directly... -->
 
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
 
-Let's check into unqiue ADM values
-```{r}
-#| code-fold: true
-#| code-summary: "Show the code"
-unique_values_3 <- unique(nga$shapeName)
-length(unique_values_3)
-```
+<!-- duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ] -->
 
+<!-- # Check if there are any duplicates -->
+<!-- if (nrow(duplicates) > 0) { -->
+<!--   cat("Duplicate values found in the BUS_STOP_N column.\n") -->
+<!--   print(duplicates) -->
 
+<!--   # Remove duplicates from the original dataframe -->
+<!--   busstop <- busstop[!duplicated(busstop$BUS_STOP_N), ] -->
 
+<!--   cat("Duplicates removed from the BUS_STOP_N column.\n") -->
+<!-- } else { -->
+<!--   cat("No duplicate values found in the BUS_STOP_N column.\n") -->
+<!-- } -->
+<!-- ``` -->
 
+<!-- Checked duplicates removed successfully -->
 
-::: 
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
 
+<!-- duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ] -->
 
+<!-- # Check if there are any duplicates -->
+<!-- if (nrow(duplicates) > 0) { -->
+<!--   cat("Duplicate values found in the BUS_STOP_N column.\n") -->
+<!--   print(duplicates) -->
+<!-- } else { -->
+<!--   cat("No duplicate values found in the BUS_STOP_N column.\n") -->
+<!-- } -->
 
+<!-- ``` -->
 
+<!-- ```{r} -->
+<!-- #| eval: false -->
+<!-- summary(busstop) -->
+<!-- ``` -->
 
+<!-- ## Hexagonal Dataset -->
 
+<!-- ### Create Hexagon Dataset from busstop -->
 
+<!-- Next we proceed to fulfill our requirement of preparing a hexagon dataset with specified cell dimensions of 250 by 250 units called **hexagon** using the **st_make_grid** function from the sf package. -->
 
+<!-- We convert it into a sf dataframe called **hexagon_sf** using the **st_sf** function of sf package. -->
 
+<!-- The code also adds a new variable/column called "grid_id" to the sf object. The "grid_id" values are assigned incrementally, starting from 1 and corresponding to the order of the hexagons in the grid. This step essentially assigns a unique identifier to each hexagon in the grid, facilitating further spatial analysis or mapping. -->
 
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
 
-::: panel-tabset
+<!-- hexagon = st_make_grid(busstop, c(250, 250), what = "polygons", square = FALSE) -->
 
+<!-- # To sf and add grid ID -->
+<!-- hexagon_sf = st_sf(hexagon) %>% -->
+<!--   # add grid ID -->
+<!--   mutate(grid_id = 1:length(lengths(hexagon))) -->
 
+<!-- ``` -->
 
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
 
+<!-- duplicates <- hexagon_sf[duplicated(hexagon_sf$grid_id), ] -->
 
+<!-- # Check if there are any duplicates -->
+<!-- if (nrow(duplicates) > 0) { -->
+<!--   cat("Duplicate values found in the grid_id column.\n") -->
+<!--   print(duplicates) -->
+<!-- } else { -->
+<!--   cat("No duplicate values found in the grid_id column.\n") -->
+<!-- } -->
 
+<!-- ``` -->
 
+<!-- ### Examine The Grid -->
 
+<!-- A brief overplot shows that there are 22134 grids in total and 19003 are without bus stops. We have a max of 5 bus stops per ORIGIN_GRID. -->
 
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
+<!-- hexagon_sf$n_colli = lengths(st_intersects(hexagon_sf, busstop)) -->
+<!-- count_all_grid_ids <- n_distinct(hexagon_sf$grid_id) -->
+<!-- count_zero_bus_stops <- hexagon_sf %>% -->
+<!--   filter(n_colli == 0) %>% -->
+<!--   summarize(count = n_distinct(grid_id)) %>% -->
+<!--   pull(count) -->
+<!-- print(count_all_grid_ids) -->
+<!-- print(count_zero_bus_stops) -->
+<!-- summary(hexagon_sf$n_colli) -->
+<!-- ``` -->
 
+<!-- ### Important step to ensure this dataset will be useful for us -->
 
+<!-- Filter for only hexagon data with non-zero counts of bus stops -->
 
-:::
+<!-- ```{r} -->
+<!-- hexagon_sf = filter(hexagon_sf, n_colli > 0) -->
+<!-- write_rds(hexagon_sf, "data/rds/hexagon_sf.rds") -->
+<!-- hexagon_sf <- read_rds("data/rds/hexagon_sf.rds") -->
+<!-- ``` -->
+
+<!-- ### VIsualising the dataset -->
+
+<!-- We can also do a visualisation to analyze the distribution of busstops. We specify break points at 0,1,2,3,4 and 5 -->
+
+<!-- From the map below, it is obvious that most hexagons have 1 or 2 bus stops in their grid with some having 4 or 5 bus stops. There is approximately one 'cluster' that are close to each other and having 4 or 5 bus stops in each region in North, East, South, West. -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
+<!-- tmap_mode("plot") -->
+
+<!-- map_busstopcounts = tm_shape(hexagon_sf) + -->
+<!--   tm_fill( -->
+<!--     col = "n_colli", -->
+<!--     palette = c("grey",rev(viridis(5))), -->
+<!--     breaks = c(0, 1, 2, 3, 4, 5), -->
+<!--     title = "Number of Busstops", -->
+<!--     id = "grid_id", -->
+<!--     showNA = FALSE, -->
+<!--     alpha = 0.6, -->
+<!--     popup.vars = c( -->
+<!--       "Number of collisions: " = "n_colli" -->
+<!--     ), -->
+<!--     popup.format = list( -->
+<!--       n_colli = list(format = "f", digits = 0) -->
+<!--     ) -->
+<!--   ) + -->
+<!--   tm_borders(col = "grey40", lwd = 0.7) -->
+
+<!-- map_busstopcounts -->
+<!-- ``` -->
+
+<!-- A few notable findings were: -->
+
+<!-- -   In the North-West, bus stops are scarce around the cemetery in Choa Chu Kang, the nearest bus stops in that area are those along Lim Chu Kang road. Tengah Airbase is also located in that area. -->
+
+<!-- -   At the far East, bus stops are scarce around Changi Airport -->
+
+<!--     *- "grid_id" = 22027 is an extreme outlier, we will need to drop it* -->
+
+<!-- -   Towards the middle, we have Paya Lebar Airbase -->
+
+<!-- -   In the middle, we have the Central Water Catchment -->
+
+<!-- -   A standalone bus stop in Sentosa Island -->
+
+<!--     *- "grid_id" = 11471 is a potential outlier and should be considered for exclusion* -->
+
+<!-- -   A few bus stops in Johor are surprisingly in our dataset too and in -->
+
+<!--     *- "grid_id" = 7068 is an extreme outlier, we will need to drop it.* -->
+
+<!--     *- "grid_id" for 8113,8237,8351,8485 are potential outliers as well* -->
+
+<!-- -   Other than those mentioned above, the positioning of the rest of the bus stops seem to be acceptable and will not skew our dataset too much. -->
+
+<!-- ### Data Cleaning -->
+
+<!-- Hence, let's proceed straight to dropping these data that will likely cause problems for our analysis. After deeper consideration, we decided that we should drop grid_ids for 22027, 11471 and 7068 -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
+<!-- # Combine Busstop and Hexagon -->
+<!-- hexagon_sf <- hexagon_sf %>% -->
+<!--   filter(!grid_id %in% c(22027, 11471, 7068)) -->
+<!-- ``` -->
+
+<!-- ## Combining the Datasets -->
+
+<!-- We needed to perform aggregation of passenger trips by Hexagon instead of Origin Bus Stop, hence we need to first integrate bus stop data and the hexagon dataset using the **st_intersection** function from the sf package. The intersection operation retains only the spatial elements (points) that overlap between the original bus stop locations and the hexagonal grid.The resulting busstop_hexagon dataset contains information about which hexagon grid each bus stop is located in. -->
+
+<!-- ```{r} -->
+<!-- #| code-fold: true -->
+<!-- #| code-summary: "Show the code" -->
+<!-- # Combine Busstop and Hexagon -->
+<!-- busstop_hexagon <- st_intersection(busstop, hexagon_sf) %>% -->
+<!--   select(BUS_STOP_N, grid_id) %>% -->
+<!--   st_drop_geometry -->
+<!-- ``` -->
