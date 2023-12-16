@@ -53,10 +53,43 @@ For the purpose of this assignment, data from several open government sources wi
 
 -   HDB: This data set is the geocoded version of *HDB Property Information* data from data.gov. The data set is prepared using September 2021 data. If you want to prepare you own data by using the latest *HDB Property Information* provided on data.gov.sg, this [link](https://is415-msty.netlify.app/posts/2021-10-25-take-home-exercise-3/?panelset6=glimpse%28%29#geocoding-our-aspatial-data) provides a useful step-by-step guide.
 
+# **The Task**
+
+The specific tasks of this take-home exercise are as follows:
+
+## **Geospatial Data Science**
+
+-   Derive an analytical hexagon data of 375m (this distance is the perpendicular distance between the centre of the hexagon and its edges) to represent the [traffic analysis zone (TAZ)](https://tmg.utoronto.ca/files/Reports/Traffic-Zone-Guidance_March-2021_Final.pdf).
+
+-   With reference to the time intervals provided in the table below, construct an O-D matrix of commuter flows for a time interval of your choice by integrating *Passenger Volume by Origin Destination Bus Stops* and *Bus Stop Location* from [LTA DataMall](https://datamall.lta.gov.sg/content/datamall/en.html). The O-D matrix must be aggregated at the analytics hexagon level
+
+    | Peak hour period             | Bus tap on time |
+    |------------------------------|-----------------|
+    | Weekday morning peak         | 6am to 9am      |
+    | Weekday afternoon peak       | 5pm to 8pm      |
+    | Weekend/holiday morning peak | 11am to 2pm     |
+    | Weekend/holiday evening peak | 4pm to 7pm      |
+
+-   Display the O-D flows of the passenger trips by using appropriate geovisualisation methods (not more than 5 maps).
+
+-   Describe the spatial patterns revealed by the geovisualisation (not more than 100 words per visual).
+
+-   Assemble at least three propulsive and three attractiveness variables by using aspatial and geospatial from publicly available sources.
+
+-   Compute a distance matrix by using the analytical hexagon data derived earlier.
+
+## **Spatial Interaction Modelling**
+
+-   Calibrate spatial interactive models to determine factors affecting urban commuting flows at the selected time interval.
+
+-   Present the modelling results by using appropriate geovisualisation and graphical visualisation methods. (Not more than 5 visuals)
+
+-   With reference to the Spatial Interaction Model output tables, maps and data visualisation prepared, describe the modelling results. (not more than 100 words per visual).
+
 # Install R Package
 
 ```{r}
-pacman::p_load(sf, sfdep, magrittr, tidyverse, tmap, knitr, RColorBrewer, viridis)
+pacman::p_load(sf, sp, sfdep, magrittr, tidyverse, tmap, knitr, RColorBrewer, viridis, reshape2, performance,  stplanr,httr, lwgeom)
 ```
 
 # 1. Importing Data
@@ -86,6 +119,19 @@ busstop <- st_read(dsn = "data/geospatial",
 
 ```
 
+## CBD
+
+Proximity to CBD is often a popular variable for a very good reason - nearer means more dense population. Even though the Singapore goverment is planning to mitigate this by constructing hubs in each town, it is unlikely that proximity to city does not affect travel decisions. Coordinates of CBD is dervied from [GeoHack](https://geohack.toolforge.org/geohack.php?pagename=Central_Area,_Singapore&params=1_17_30_N_103_51_00_E_type:city(60520)_region:SG)
+
+```{r}
+lat <- 1.291667
+lng <- 103.85
+
+cbd_sf <- data.frame(lat, lng) %>%
+  st_as_sf(coords = c("lng", "lat"), crs=4326) %>%
+  st_transform(crs=3414)
+```
+
 ## Train Station
 
 **Train Station** is a geospatial data in .shp file. We save it as a sf data frame called `trainstation` using the **st_read** function of the sf package. The data is then geo-referenced to coordinates from the Singapore SVY21 coordinate system (EPSG: 3414)
@@ -95,6 +141,8 @@ trainstation <- st_read(dsn = "data/geospatial",
                    layer = "RapidTransitSystemStation") %>%
   st_transform(crs=3414)
 
+write_rds(trainstation, "data/rds/trainstation.rds")
+
 ```
 
 ## Train Station Exit Point
@@ -102,6 +150,7 @@ trainstation <- st_read(dsn = "data/geospatial",
 **Train Station Exit Point** is a geospatial data in .shp file. We save it as a sf data frame called `trainstationEP` using the **st_read** function of the sf package. The data is then geo-referenced to coordinates from the Singapore SVY21 coordinate system (EPSG: 3414)
 
 ```{r}
+options("rgdal_show_exportToProj4_warnings"="none", "OGR_GEOMETRY_ACCEPT_UNCLOSED_RING"="YES")
 trainstationEP <- st_read(dsn = "data/geospatial", 
                    layer = "RapidTransitSystemStation") %>%
   st_transform(crs=3414)
@@ -125,326 +174,1326 @@ Note st_read() function of sf package is used to import the shapefile into R as 
 
 ```{r}
 hdb <- read_csv("data/aspatial/hdb.csv")
+hdb_sf <- st_as_sf(hdb, coords = c("lng", "lat"), crs = 4326) %>%
+  st_transform(crs = 3414)
+
 ```
 
 ## School Directory
 
 **School Directory**: Using geocoded version of HDB Property Information data from data.gov
 
+The provided code chunks perform geocoding using the SLA [OneMap API](https://www.onemap.gov.sg/apidocs/) in R. The process involves reading input data in CSV format into the R Studio environment using the **`read_csv`** function from the **`readr`** package. The geocoding is then executed using a series of HTTP calls facilitated by functions from the **`httr`** package, sending individual records to the OneMap geocoding server.
+
+The results are organized into two tibble data.frames: **`found`** and **`not_found`**. The **`found`** data.frame contains records that were successfully geocoded, while **`not_found`** includes postal codes that failed the geocoding process.
+
+In the final step, the **`found`** data table is joined with the initial CSV data table using a unique identifier (**`POSTAL`**) shared between the two data tables. The resulting data table is saved as a new CSV file named "found."
+
 ```{r}
-school <- read_csv("data/geospatial/Generalinformationofschools.csv")
+#| eval=FALSE
+school <- read_csv("data/aspatial/Generalinformationofschools.csv")
+```
+
+### Geocoding using SLA API
+
+```{r}
+#| eval=FALSE
+url<-"https://www.onemap.gov.sg/api/common/elastic/search"
+
+csv<-read_csv("data/aspatial/Generalinformationofschools.csv")
+postcodes<-csv$`postal_code`
+
+found<-data.frame()
+not_found<-data.frame()
+
+for(postcode in postcodes){
+  query<-list('searchVal'=postcode,'returnGeom'='Y','getAddrDetails'='Y','pageNum'='1')
+  res<- GET(url,query=query)
+  
+  if((content(res)$found)!=0){
+    found<-rbind(found,data.frame(content(res))[4:13])
+  } else{
+    not_found = data.frame(postcode)
+  }
+}
+```
+
+Next, the code chunk below will be used to combine both *found* and *not_found* data.frames into a single tibble data.frame called *merged*. At the same time, we will write *merged* and *not_found* tibble data.frames into two separate csv files called *schools* and *not_found* respectively.
+
+```{r}
+#| eval=FALSE
+merged = merge(csv,found, by.x='postal_code', by.y='results.POSTAL',all=TRUE)
+               write.csv(merged, file="data/aspatial/schools.csv")
+               write.csv(not_found, file="data/aspatial/not_found.csv")
+               
+```
+
+### Tidying schools data.frame
+
+In this sub-section, we will import schools.csv into R environment and at the same time tidying the data by selecting only the necessary fields as well as rename some field:
+
+-   import schools.csv in R environment as an tibble data.frame called schools,
+
+-   rename results.LATITUDE and results.LONGITUDE to latitude and longitude respectively,
+
+-   retain only postal_code, school_name, latitude and longitude in schools tibble data.frame
+
+-   With the help of Google Map, we derived the location information of the ungeocoded school by using it's postcode for "ZHENGHUA SECONDARY SCHOOL"
+
+```{r}
+schools <- read_csv("data/aspatial/schools.csv") %>%
+  rename(latitude = "results.LATITUDE",
+         longitude = "results.LONGITUDE") %>%
+  bind_rows(tibble(
+    postal_code = "679962",
+    school_name = "ZHENGHUA SECONDARY SCHOOL",
+    latitude = 1.3887,
+    longitude = 103.7652
+  )) %>%
+  drop_na() %>%
+  select(postal_code, school_name, latitude, longitude)
+
+```
+
+### Converting an aspatial data into sf tibble data.frame
+
+Next, we converted schools tibble data.frame data into a simple feature tibble data.frame called **schools_sf** by using values in latitude and longitude field using **st_as_sf** function.
+
+```{r}
+schools_sf <- st_as_sf(schools,
+                       coords =c("longitude","latitude"),
+                       crs=4326) %>%
+  st_transform(crs=3414)
+```
+
+### Plotting a point simple feature layer of schools onto mpsz
+
+```{r}
+tmap_mode("plot")
+tmap_options(check.and.fix = TRUE)
+tm_shape(mpsz) +
+  tm_polygons() +
+tm_shape(schools_sf) +
+  tm_dots()
 ```
 
 ## Specially Collected Data
 
-zz
+Now, let's import the rest of the data
+
+```{r}
+Business <- st_read(dsn = "data/geospatial", 
+                   layer = "Business") %>%
+  st_transform(crs=3414)
+
+```
+
+```{r}
+FinServ <- st_read(dsn = "data/geospatial", 
+                   layer = "FinServ") %>%
+  st_transform(crs=3414)
+
+```
+
+```{r}
+FnB <- st_read(dsn = "data/geospatial", 
+                   layer = "F&B") %>%
+  st_transform(crs=3414)
+
+```
+
+```{r}
+Retails <- st_read(dsn = "data/geospatial", 
+                   layer = "Retails") %>%
+  st_transform(crs=3414)
+
+```
+
+```{r}
+Entertn <- st_read(dsn = "data/geospatial", 
+                   layer = "entertn") %>%
+  st_transform(crs=3414)
+
+```
+
+```{r}
+Leisure <- st_read(dsn = "data/geospatial", 
+                   layer = "Liesure&Recreation") %>%
+  st_transform(crs=3414)
+
+```
 :::
 
 # 2. Data Cleaning
 
-<!-- ::: panel-tabset \## Passenger Volume -->
+## Passenger Volume
 
-<!-- ### Data Exploration -->
+### Data Exploration
 
-<!-- ```{r} -->
-<!-- #| eval=FALSE -->
-<!-- glimpse(odbus) -->
-<!-- ``` -->
+```{r}
+#| eval=FALSE
+glimpse(odbus)
+```
 
-<!-- As we intend to utilize Bus-stop codes as our unique identifiers when joining with our other datasets, it is not advisable to have it remain as a chr datatype. In fact, we should change it to a factor datatype. -->
+As we intend to utilize Bus-stop codes as our unique identifiers when joining with our other datasets, it is not advisable to have it remain as a chr datatype. In fact, we should change it to a factor datatype.
 
-<!-- ```{r} -->
-<!-- odbus$ORIGIN_PT_CODE <- as.factor(odbus$ORIGIN_PT_CODE) -->
-<!-- odbus$DESTINATION_PT_CODE <- as.factor(odbus$DESTINATION_PT_CODE)  -->
-<!-- ``` -->
+```{r}
+odbus$ORIGIN_PT_CODE <- as.factor(odbus$ORIGIN_PT_CODE)
+odbus$DESTINATION_PT_CODE <- as.factor(odbus$DESTINATION_PT_CODE)
+```
 
-<!-- ### Checking for Duplicates -->
+### Checking for Duplicates
 
-<!-- There is no duplicates -->
+Passed initial checks in code chunk below for whole duplicate rows,
 
-<!-- ```{r} -->
-<!-- #| eval: false -->
-<!-- duplicate <- odbus %>% -->
-<!--   group_by_all() %>% -->
-<!--   filter(n()>1) %>% -->
-<!--   ungroup() -->
-<!-- duplicate -->
-<!-- ``` -->
+```{r}
+duplicate <- odbus %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
 
-<!-- ### Checking for Missing Data -->
+### Checking for Missing Data
 
-<!-- There is no missing data -->
+There is no missing data
 
-<!-- ```{r} -->
-<!-- #| eval=FALSE -->
+```{r}
+#| eval=FALSE
+summary(odbus)
+```
 
-<!-- summary(odbus) -->
-<!-- ``` -->
+### Classifying Peak Hours
 
-<!-- ### Classifying Peak Hours -->
+With reference to the time intervals provided in the requirements, we computed the passenger trips generated by origin. The passenger trips by origin are saved in 4 dataframes based on their respective classifications namely:
 
-<!-- With reference to the time intervals provided in the requirements, we computed the passenger trips generated by origin. The passenger trips by origin are saved in 4 dataframes based on their respective classifications namely: -->
+-   weekday_morning_peak
 
-<!-- -   weekday_morning_peak -->
+```{r}
+#| eval=FALSE
+weekday_morning_peak <- odbus %>%
+  filter(DAY_TYPE == "WEEKDAY") %>%
+  filter(TIME_PER_HOUR >= 6 &
+           TIME_PER_HOUR <= 9) %>%
+  group_by(ORIGIN_PT_CODE,
+           DESTINATION_PT_CODE) %>%
 
-<!-- -   weekday_afternoon_peak -->
+  summarise(TRIPS = sum(TOTAL_TRIPS))
 
-<!-- -   weekend_morning_peak -->
 
-<!-- -   weekend_evening_peak -->
+write_rds(weekday_morning_peak, "data/rds/weekday_morning_peak.rds")
+```
+
+```{r}
+weekday_morning_peak <- read_rds("data/rds/weekday_morning_peak.rds")
+```
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
-<!-- weekday_morning_peak <- odbus %>% -->
-<!--   filter(DAY_TYPE == "WEEKDAY") %>% -->
-<!--   filter(TIME_PER_HOUR >= 6 & -->
-<!--            TIME_PER_HOUR <= 9) %>% -->
-<!--   group_by(ORIGIN_PT_CODE) %>% -->
-<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
+In the code above, we have did a summation of Origin trips , grouped by the origin bus stop number for the weekday_morning_peak through filtering for weekdays for the time range 6am to 9am.
 
-<!-- weekday_afternoon_peak <- odbus %>% -->
-<!--   filter(DAY_TYPE == "WEEKDAY") %>% -->
-<!--   filter(TIME_PER_HOUR >= 17 & -->
-<!--            TIME_PER_HOUR <= 20) %>% -->
-<!--   group_by(ORIGIN_PT_CODE) %>% -->
-<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
+We save our processed data into .rds data format files using the `write_rds()` of **readr** package. The output file is saved in *rds* sub-folder. We do this to reduce the loading time and more importantly, we can avoid uploading the large raw files onto GitHub.
 
-<!-- weekend_morning_peak <- odbus %>% -->
-<!--   filter(DAY_TYPE == "WEEKENDS/HOLIDAY") %>% -->
-<!--   filter(TIME_PER_HOUR >= 11 & -->
-<!--            TIME_PER_HOUR <= 14) %>% -->
-<!--   group_by(ORIGIN_PT_CODE) %>% -->
-<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
+## Bus Stop Location
 
-<!-- weekend_evening_peak <- odbus %>% -->
-<!--   filter(DAY_TYPE == "WEEKENDS/HOLIDAY") %>% -->
-<!--   filter(TIME_PER_HOUR >= 16 & -->
-<!--            TIME_PER_HOUR <= 19) %>% -->
-<!--   group_by(ORIGIN_PT_CODE) %>% -->
-<!--   summarise(TRIPS = sum(TOTAL_TRIPS)) -->
+### Checking for Duplicates
 
+Passed initial checks for whole duplicate rows, however...
 
-<!-- write_rds(weekday_morning_peak, "data/rds/weekday_morning_peak.rds") -->
-<!-- weekday_morning_peak <- read_rds("data/rds/weekday_morning_peak.rds") -->
+```{r}
+duplicate <- busstop %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
 
-<!-- write_rds(weekday_afternoon_peak, "data/rds/weekday_afternoon_peak.rds") -->
-<!-- weekday_afternoon_peak <- read_rds("data/rds/weekday_afternoon_peak.rds") -->
+duplicate bus stops found, removing duplicates directly...
 
-<!-- write_rds(weekend_morning_peak, "data/rds/weekend_morning_peak.rds") -->
-<!-- weekend_morning_peak <- read_rds("data/rds/weekend_morning_peak.rds") -->
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ]
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+  # Remove duplicates from the original dataframe
+  busstop <- busstop[!duplicated(busstop$BUS_STOP_N), ]
+  cat("Duplicates removed from the BUS_STOP_N column.\n")
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+```
 
-<!-- write_rds(weekend_evening_peak, "data/rds/weekend_evening_peak.rds") -->
-<!-- weekend_evening_peak <- read_rds("data/rds/weekend_evening_peak.rds") -->
+Checked duplicates removed successfully
 
-<!-- ``` -->
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ]
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+```
 
-<!-- In the code above, we have did a summation of Origin trips , grouped by the origin bus stop number for the 4 classifications through filtering for weekdays from weekends and by the stated time bins. -->
+### Checking for Missing Data
 
-<!-- We save our processed data into .rds data format files using the `write_rds()` of **readr** package. The output file is saved in *rds* sub-folder. We do this to reduce the loading time and more importantly, we can avoid uploading the large raw files onto GitHub. -->
+No missing data
 
-<!-- ## Bus Stop Location -->
+```{r}
+#| eval: false
+summary(busstop)
+```
 
-<!-- Passed initial checks for whole duplicate rows, however... -->
+## Hexagonal Dataset
 
-<!-- ```{r} -->
-<!-- #| eval: false -->
-<!-- duplicate <- busstop %>% -->
-<!--   group_by_all() %>% -->
-<!--   filter(n()>1) %>% -->
-<!--   ungroup() -->
-<!-- duplicate -->
-<!-- ``` -->
+### Create Hexagon Dataset from busstop
 
-<!-- duplicate bus stops found, removing duplicates directly... -->
+Next we proceed to fulfill our requirement of preparing a hexagon dataset with specified cell dimensions of 375 by 375 units called **hexagon** using the **st_make_grid** function from the sf package.
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
+We convert it into a sf dataframe called **hexagon_sf** using the **st_sf** function of sf package.
 
-<!-- duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ] -->
+The code also adds a new variable/column called "grid_id" to the sf object. The "grid_id" values are assigned incrementally, starting from 1 and corresponding to the order of the hexagons in the grid. This step essentially assigns a unique identifier to each hexagon in the grid, facilitating further spatial analysis or mapping.
 
-<!-- # Check if there are any duplicates -->
-<!-- if (nrow(duplicates) > 0) { -->
-<!--   cat("Duplicate values found in the BUS_STOP_N column.\n") -->
-<!--   print(duplicates) -->
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+hexagon = st_make_grid(busstop, c(375, 375), what = "polygons", square = FALSE)
+# To sf and add grid ID
+hexagon_sf = st_sf(hexagon) %>%
+  # add grid ID
+  mutate(grid_id = 1:length(lengths(hexagon))) %>%
+  st_transform(crs = 3414)
+```
 
-<!--   # Remove duplicates from the original dataframe -->
-<!--   busstop <- busstop[!duplicated(busstop$BUS_STOP_N), ] -->
+### Checking for Duplicates
 
-<!--   cat("Duplicates removed from the BUS_STOP_N column.\n") -->
-<!-- } else { -->
-<!--   cat("No duplicate values found in the BUS_STOP_N column.\n") -->
-<!-- } -->
-<!-- ``` -->
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- hexagon_sf[duplicated(hexagon_sf$grid_id), ]
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the grid_id column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the grid_id column.\n")
+}
+```
 
-<!-- Checked duplicates removed successfully -->
+### Checking for Missing Data
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
+A brief overplot shows that there are 9918 grids in total and 7744 are without bus stops. We have a max of 10 bus stops per grid_id
 
-<!-- duplicates <- busstop[duplicated(busstop$BUS_STOP_N), ] -->
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
 
-<!-- # Check if there are any duplicates -->
-<!-- if (nrow(duplicates) > 0) { -->
-<!--   cat("Duplicate values found in the BUS_STOP_N column.\n") -->
-<!--   print(duplicates) -->
-<!-- } else { -->
-<!--   cat("No duplicate values found in the BUS_STOP_N column.\n") -->
-<!-- } -->
+hexagon_sf$n_colli = lengths(st_intersects(hexagon_sf, busstop))
 
-<!-- ``` -->
+count_all_grid_ids <- n_distinct(hexagon_sf$grid_id)
 
-<!-- ```{r} -->
-<!-- #| eval: false -->
-<!-- summary(busstop) -->
-<!-- ``` -->
+count_zero_bus_stops <- hexagon_sf %>%
 
-<!-- ## Hexagonal Dataset -->
+  filter(n_colli == 0) %>%
 
-<!-- ### Create Hexagon Dataset from busstop -->
+  summarize(count = n_distinct(grid_id)) %>%
 
-<!-- Next we proceed to fulfill our requirement of preparing a hexagon dataset with specified cell dimensions of 250 by 250 units called **hexagon** using the **st_make_grid** function from the sf package. -->
+  pull(count)
 
-<!-- We convert it into a sf dataframe called **hexagon_sf** using the **st_sf** function of sf package. -->
+print(count_all_grid_ids)
 
-<!-- The code also adds a new variable/column called "grid_id" to the sf object. The "grid_id" values are assigned incrementally, starting from 1 and corresponding to the order of the hexagons in the grid. This step essentially assigns a unique identifier to each hexagon in the grid, facilitating further spatial analysis or mapping. -->
+print(count_zero_bus_stops)
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
+summary(hexagon_sf$n_colli)
 
-<!-- hexagon = st_make_grid(busstop, c(250, 250), what = "polygons", square = FALSE) -->
+```
 
-<!-- # To sf and add grid ID -->
-<!-- hexagon_sf = st_sf(hexagon) %>% -->
-<!--   # add grid ID -->
-<!--   mutate(grid_id = 1:length(lengths(hexagon))) -->
+Filter for only hexagon data with non-zero counts of bus stops
 
-<!-- ``` -->
+```{r}
+hexagon_sf = filter(hexagon_sf, n_colli > 0)
+write_rds(hexagon_sf, "data/rds/hexagon_sf.rds")
+hexagon_sf <- read_rds("data/rds/hexagon_sf.rds")
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
+```
 
-<!-- duplicates <- hexagon_sf[duplicated(hexagon_sf$grid_id), ] -->
+### VIsualising the dataset
 
-<!-- # Check if there are any duplicates -->
-<!-- if (nrow(duplicates) > 0) { -->
-<!--   cat("Duplicate values found in the grid_id column.\n") -->
-<!--   print(duplicates) -->
-<!-- } else { -->
-<!--   cat("No duplicate values found in the grid_id column.\n") -->
-<!-- } -->
+We can also do a visualisation to analyze the distribution of busstops. We specify break points at 0,1,2,3,4 and 5
 
-<!-- ``` -->
+From the map below, it is obvious that most hexagons have 1 or 2 bus stops in their grid with some having 4 or 5 bus stops. There is approximately one 'cluster' that are close to each other and having 4 or 5 bus stops in each region in North, East, South, West.
 
-<!-- ### Examine The Grid -->
+```{r}
 
-<!-- A brief overplot shows that there are 22134 grids in total and 19003 are without bus stops. We have a max of 5 bus stops per ORIGIN_GRID. -->
+#| code-fold: true
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
-<!-- hexagon_sf$n_colli = lengths(st_intersects(hexagon_sf, busstop)) -->
-<!-- count_all_grid_ids <- n_distinct(hexagon_sf$grid_id) -->
-<!-- count_zero_bus_stops <- hexagon_sf %>% -->
-<!--   filter(n_colli == 0) %>% -->
-<!--   summarize(count = n_distinct(grid_id)) %>% -->
-<!--   pull(count) -->
-<!-- print(count_all_grid_ids) -->
-<!-- print(count_zero_bus_stops) -->
-<!-- summary(hexagon_sf$n_colli) -->
-<!-- ``` -->
+#| code-summary: "Show the code"
 
-<!-- ### Important step to ensure this dataset will be useful for us -->
+tmap_mode("plot")
 
-<!-- Filter for only hexagon data with non-zero counts of bus stops -->
+map_busstopcounts = tm_shape(hexagon_sf) +
 
-<!-- ```{r} -->
-<!-- hexagon_sf = filter(hexagon_sf, n_colli > 0) -->
-<!-- write_rds(hexagon_sf, "data/rds/hexagon_sf.rds") -->
-<!-- hexagon_sf <- read_rds("data/rds/hexagon_sf.rds") -->
-<!-- ``` -->
+  tm_fill(
 
-<!-- ### VIsualising the dataset -->
+    col = "n_colli",
 
-<!-- We can also do a visualisation to analyze the distribution of busstops. We specify break points at 0,1,2,3,4 and 5 -->
+    palette = c("grey",rev(viridis(5))),
 
-<!-- From the map below, it is obvious that most hexagons have 1 or 2 bus stops in their grid with some having 4 or 5 bus stops. There is approximately one 'cluster' that are close to each other and having 4 or 5 bus stops in each region in North, East, South, West. -->
+    breaks = c(0, 1, 2, 3, 4, 5,6,7,8,9,10),
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
-<!-- tmap_mode("plot") -->
+    title = "Number of Busstops",
 
-<!-- map_busstopcounts = tm_shape(hexagon_sf) + -->
-<!--   tm_fill( -->
-<!--     col = "n_colli", -->
-<!--     palette = c("grey",rev(viridis(5))), -->
-<!--     breaks = c(0, 1, 2, 3, 4, 5), -->
-<!--     title = "Number of Busstops", -->
-<!--     id = "grid_id", -->
-<!--     showNA = FALSE, -->
-<!--     alpha = 0.6, -->
-<!--     popup.vars = c( -->
-<!--       "Number of collisions: " = "n_colli" -->
-<!--     ), -->
-<!--     popup.format = list( -->
-<!--       n_colli = list(format = "f", digits = 0) -->
-<!--     ) -->
-<!--   ) + -->
-<!--   tm_borders(col = "grey40", lwd = 0.7) -->
+    id = "grid_id",
 
-<!-- map_busstopcounts -->
-<!-- ``` -->
+    showNA = FALSE,
 
-<!-- A few notable findings were: -->
+    alpha = 0.6,
 
-<!-- -   In the North-West, bus stops are scarce around the cemetery in Choa Chu Kang, the nearest bus stops in that area are those along Lim Chu Kang road. Tengah Airbase is also located in that area. -->
+    popup.vars = c(
 
-<!-- -   At the far East, bus stops are scarce around Changi Airport -->
+      "Number of collisions: " = "n_colli"
 
-<!--     *- "grid_id" = 22027 is an extreme outlier, we will need to drop it* -->
+    ),
 
-<!-- -   Towards the middle, we have Paya Lebar Airbase -->
+    popup.format = list(
 
-<!-- -   In the middle, we have the Central Water Catchment -->
+      n_colli = list(format = "f", digits = 0)
 
-<!-- -   A standalone bus stop in Sentosa Island -->
+    )
 
-<!--     *- "grid_id" = 11471 is a potential outlier and should be considered for exclusion* -->
+  ) +
 
-<!-- -   A few bus stops in Johor are surprisingly in our dataset too and in -->
+  tm_borders(col = "grey40", lwd = 0.7) +
+  tm_view(set.zoom.limits = c(11, 14))
 
-<!--     *- "grid_id" = 7068 is an extreme outlier, we will need to drop it.* -->
+map_busstopcounts
 
-<!--     *- "grid_id" for 8113,8237,8351,8485 are potential outliers as well* -->
+```
 
-<!-- -   Other than those mentioned above, the positioning of the rest of the bus stops seem to be acceptable and will not skew our dataset too much. -->
+A few notable findings were:
 
-<!-- ### Data Cleaning -->
+-   In the North-West, bus stops are scarce around the cemetery in Choa Chu Kang, the nearest bus stops in that area are those along Lim Chu Kang road. Tengah Airbase is also located in that area.
 
-<!-- Hence, let's proceed straight to dropping these data that will likely cause problems for our analysis. After deeper consideration, we decided that we should drop grid_ids for 22027, 11471 and 7068 -->
+-   At the far East, bus stops are scarce around Changi Airport
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
-<!-- # Combine Busstop and Hexagon -->
-<!-- hexagon_sf <- hexagon_sf %>% -->
-<!--   filter(!grid_id %in% c(22027, 11471, 7068)) -->
-<!-- ``` -->
+    *- "grid_id" = 9888 is an extreme outlier, we will need to drop it*
 
-<!-- ## Combining the Datasets -->
+    *- "grid_id" for 9182, 9348, 9431 are potential outliers as well*
 
-<!-- We needed to perform aggregation of passenger trips by Hexagon instead of Origin Bus Stop, hence we need to first integrate bus stop data and the hexagon dataset using the **st_intersection** function from the sf package. The intersection operation retains only the spatial elements (points) that overlap between the original bus stop locations and the hexagonal grid.The resulting busstop_hexagon dataset contains information about which hexagon grid each bus stop is located in. -->
+-   Towards the middle, we have Paya Lebar Airbase
 
-<!-- ```{r} -->
-<!-- #| code-fold: true -->
-<!-- #| code-summary: "Show the code" -->
-<!-- # Combine Busstop and Hexagon -->
-<!-- busstop_hexagon <- st_intersection(busstop, hexagon_sf) %>% -->
-<!--   select(BUS_STOP_N, grid_id) %>% -->
-<!--   st_drop_geometry -->
-<!-- ``` -->
+-   In the middle, we have the Central Water Catchment
+
+-   A standalone bus stop in Sentosa Island
+
+    *- "grid_id" = 5105 is a potential outlier and should be considered for exclusion*
+
+-   A few bus stops in Johor are surprisingly in our dataset too and in
+
+    *- "grid_id" = 3154 is an extreme outlier, we will need to drop it.*
+
+    *- "grid_id" for 3646, 3729, 3812 are potential outliers as well*
+
+-   Other than those mentioned above, the positioning of the rest of the bus stops seem to be acceptable and will not skew our dataset too much.
+
+### Removing Outliers
+
+Hence, let's proceed straight to dropping these data that will likely cause problems for our analysis. After deeper consideration, we decided that we should drop three extreme outliers, which are grid_ids for 9888, 5105, 3154
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+# Combine Busstop and Hexagon
+
+hexagon_sf <- hexagon_sf %>%
+
+  filter(!grid_id %in% c(9888, 5105, 3154))
+```
+
+## Train Station
+
+### Data Exploration
+
+```{r}
+#| eval: false
+glimpse(trainstation)
+```
+
+Columns STN_NAM_DE, TYP_CD_DES and geometry looks like they will be useful for our analysis. Let's rename them to be more intuitive. It's also necessary to check that we do not have duplicate STN_NAM_DE too as it is out identifier for the trainstation dataset. STN_NAM_DE is now renamed to **STATION_NAME** and TYP_CD_DES to **STATION_TYPE**
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+trainstation <- trainstation %>%
+  rename(STATION_NAME = STN_NAM_DE, STATION_TYPE = TYP_CD_DES)
+```
+
+### Checking for Duplicates
+
+Passed initial checks in code chunk below for whole duplicate rows, let's proceed to checking for duplicates in the ST_NAM_DE column
+
+```{r}
+#| eval: false
+duplicate <- trainstation %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+There are are 25 in the ST_NAM_DE column. HOWEVER, it is important to note that we can definitely have more than one station sharing the same name. For example, Tampines MRT station for east-west line can be a distance away from Tampines MRT station downtown line. Hence it is unwise to drop any duplicate stations we found here and keep it as it is.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- trainstation[duplicated(trainstation$STATION_NAME), ]
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the ST_NAM_DE column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the ST_NAM_DE column.\n")
+}
+```
+
+### Checking for Missing Data
+
+No Missing Data
+
+```{r}
+#| eval: false
+summary(trainstation)
+```
+
+## Train Station Exit
+
+```{r}
+#| eval: false
+glimpse(trainstationEP)
+```
+
+Similarly, let's rename the columns in trainstationEP. STN_NAM_DE is now renamed to **STATION_NAME** and TYP_CD_DES to **STATION_TYPE**
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+trainstationEP <- trainstationEP %>%
+  rename(STATION_NAME = STN_NAM_DE, STATION_TYPE = TYP_CD_DES)
+```
+
+### Checking for Duplicates
+
+Passed initial checks in code chunk below for whole duplicate rows.
+
+```{r}
+#| eval: false
+duplicate <- trainstationEP %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+Checking for duplicate records with same geometry, the results below demonstrate that each geometry value is unqiue
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- trainstationEP[duplicated(trainstationEP$geometry), ]
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the geometry column.\n")
+  print(duplicates)
+  # Remove duplicates from the original dataframe
+  trainstationEP <- trainstationEP[!duplicated(trainstationEP$geometry), ]
+  cat("Duplicates removed from the geometry column.\n")
+} else {
+  cat("No duplicate values found in the geometry column.\n")
+}
+```
+
+### Feature Engineering
+
+It is wise to note that STATION_NAME here represents the station exit.
+
+Each duplicate in the STATION_NAME likely represents a unique STATION EXIT and we perform the below. We also have tested that none of the STATION_NAME has similar geometry indirectly.
+
+> Note: (however, a more rigorous check would also involve calculating distances between said Exits of same station to check if they are of the acceptable range. We did not do that due to time limitations and having 8 datasets to investigate)
+
+The data transformation involves grouping the dataset by the variable STATION_NAME. Within each group, a new column named **"Exit"** is created, representing the row number within that group.
+
+The dataset is then ungrouped, and a composite column named **STATION_EXIT** is generated by combining the values of STATION_NAME and "Exit" with an underscore. This process results in a unique identifier (STATION_EXIT) for each entry, capturing the occurrence sequence within each station.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+trainstationEP <- trainstationEP %>%
+  group_by(STATION_NAME) %>%
+  mutate(Exit = row_number()) %>%
+  ungroup() %>%
+  mutate(STATION_EXIT = paste(STATION_NAME, Exit, sep = "_"))
+
+```
+
+### Checking for Missing Data
+
+There is no missing data in our required columns
+
+```{r}
+#| eval: false
+summary(trainstationEP)
+```
+
+## MPSZ-2019
+
+### Data Exploration
+
+```{r}
+#| eval: false
+glimpse(mpsz)
+```
+
+### Checking for Duplicates
+
+Passed initial checks in code chunk below for whole duplicate rows, let's proceed to checking for duplicates in the SUBZONE_C column
+
+```{r}
+#| eval: false
+duplicate <- mpsz %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+There are no duplicates in the SUBZONE_C column too
+
+```{r}
+duplicates <- mpsz[duplicated(mpsz$SUBZONE_C), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the SUBZONE_C column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the SUBZONE_C column.\n")
+}
+
+```
+
+### Checking for Missing Data
+
+No Missing Data
+
+```{r}
+#| eval: false
+summary(mpsz)
+```
+
+## HDB
+
+### Data Exploration
+
+```{r}
+#| eval: false
+glimpse(hdb_sf)
+```
+
+### Checking for Duplicates
+
+Passed initial checks in code chunk below for whole duplicate rows, let's proceed to checking for duplicates in the SUBZONE_C column
+
+```{r}
+#| eval: false
+duplicate <- hdb_sf %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+It seems some duplicates came up when checking the \*\*addr\* column,
+
+```{r}
+duplicates <- hdb_sf[duplicated(hdb_sf$addr), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the addr column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the addr column.\n")
+}
+
+```
+
+Specifying the unique identifier as a combination of **addr**, **blk_no** and **street**, it was shown that data is unqiue and there were no duplicates after all.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+hdb_sf <- hdb_sf %>%
+  mutate(unique_identifier = paste(addr, blk_no, street, sep = "_"))
+
+duplicates <- hdb_sf[duplicated(hdb_sf$unique_identifier), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the unique_identifier column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the unique_identifier column.\n")
+}
+```
+
+### Checking for Missing Data
+
+From the results, it seems there is at least one row that has missing data.
+
+```{r}
+#| eval: false
+summary(hdb)
+```
+
+We will drop the record indexed 8981 in ADMIRALTY since it is missing important SUBZONE data and it might affect out analysis
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+hdb <- hdb %>%
+   filter(!...1 %in% c(8981))
+```
+
+## School Directory
+
+```{r}
+#| eval: false
+glimpse(schools_sf)
+```
+
+### Checking for Duplicates
+
+Failed initial checks in code chunk below for whole duplicate rows,
+
+```{r}
+#| eval: false
+duplicate <- schools_sf %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+If duplicated records are found, the code chunk below will be used to retain the unique records.
+
+```{r}
+schools_sf <- unique(schools_sf)
+```
+
+There is no duplicates in the \*\*school_name\* column now,
+
+```{r}
+duplicates <- schools_sf[duplicated(schools_sf$school_name), ]
+
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the school_name column.\n")
+  print(duplicates)
+} else {
+  cat("No duplicate values found in the school_name column.\n")
+}
+
+```
+
+It seems some duplicates came up when checking the \*\*postal_code\* column,
+
+We decided to treat these special schools as 4 unique records as they provide different services and purposes (eg. primary and secondary) and should not be treated as the same. Hence, no additional cleaning is required.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- schools_sf[duplicated(schools_sf$postal_code), ]
+duplicates_records <- schools_sf[schools_sf$postal_code %in% duplicates$postal_code, ]
+
+# Print the new dataframe
+print(duplicates_records)
+
+```
+
+## Specially Collected Data
+
+We briefly checked for duplicates in the specially prepared datasets by Prof Kam and found out that 4 of them have few duplicates whereas FinServ and Retails have multiple duplicates which we do not have time to clean and to make sense of.
+
+For *Business* and *Entertn* dataset, we found one duplicate each, we then handled then by only using the unique records
+
+```{r}
+#| eval: false
+duplicate <- Business %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+
+Business <- unique(Business)
+```
+
+```{r}
+#| eval: false
+duplicate <- Entertn %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+
+Entertn <- unique(Entertn)
+```
+
+```{r}
+#| eval: false
+duplicate <- FnB %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+```{r}
+#| eval: false
+duplicate <- Leisure %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+:::
+
+# 3. Combining the Datasets
+
+::: panel-tabset
+## Busstop and Hexagon
+
+### Joining the data
+
+We needed to perform aggregation of passenger trips by Hexagon instead of Origin Bus Stop, hence we need to first integrate bus stop data and the hexagon dataset using the **st_intersection** function from the sf package. The intersection operation retains only the spatial elements (points) that overlap between the original bus stop locations and the hexagonal grid.The resulting busstop_hexagon dataset contains information about which hexagon grid each bus stop is located in.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+# Combine Busstop and Hexagon
+busstop_hexagon <- st_intersection(hexagon_sf, busstop) %>%
+  select(BUS_STOP_N, grid_id) %>%
+  st_drop_geometry
+
+```
+
+### Post-join Checks
+
+```{r}
+
+#| eval: false
+duplicate <- busstop_hexagon %>% 
+  group_by_all() %>% 
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+There is one duplicate in the BUS_STOP_N column, we will proceed to dropping it
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- busstop_hexagon[duplicated(busstop_hexagon$BUS_STOP_N), ]
+# Check if there are any duplicates
+if (nrow(duplicates) > 0) {
+  cat("Duplicate values found in the BUS_STOP_N column.\n")
+  print(duplicates)
+  # Remove duplicates from the original dataframe
+  busstop_hexagon <- busstop_hexagon[!duplicated(busstop_hexagon$BUS_STOP_N), ]
+  cat("Duplicates removed from the BUS_STOP_N column.\n")
+} else {
+  cat("No duplicate values found in the BUS_STOP_N column.\n")
+}
+```
+
+Duplicate successfully removed
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+duplicates <- busstop_hexagon[duplicated(busstop_hexagon$BUS_STOP_N), ]
+print(duplicates)
+```
+
+No missing data post-join
+
+```{r}
+summary(busstop_hexagon)
+```
+
+## Busstop and Hexagon and Origin Data
+
+### Joining the data
+
+Next, we are going to append the planning subzone code from busstop_hexagon data frame onto weekday_morning_peak data frame.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+od_data <- left_join(weekday_morning_peak , busstop_hexagon, 
+                     by = c("ORIGIN_PT_CODE" = "BUS_STOP_N")) %>% 
+  rename(ORIGIN_BS = ORIGIN_PT_CODE,  ORIGIN_GRID = grid_id, DESTIN_BS = DESTINATION_PT_CODE)
+```
+
+### Post-join Checks
+
+No duplicates found
+
+```{r}
+duplicate <- od_data %>% 
+  group_by_all() %>% 
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+We found some missing data in the ORIGIN_GRID column but that is expected since we did dropped some outliers when investigating the hexagon dataset
+
+Let's proceed to dropping them.
+
+```{r}
+summary(od_data)
+```
+
+Removed NA values for ORIGIN_GRID column
+
+```{r}
+od_data <- od_data %>%
+  filter(!is.na(ORIGIN_GRID))
+summary(od_data)
+```
+
+Next, we will update od_data data frame with the hexagon grids.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+
+od_data <- left_join(od_data , busstop_hexagon, by = c("DESTIN_BS" = "BUS_STOP_N"))
+
+duplicate <- od_data %>% 
+  group_by_all() %>%
+  filter(n()>1) %>% 
+  ungroup()
+duplicate
+
+```
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+od_data <- unique(od_data)
+
+od_data <- od_data %>% 
+rename(DESTIN_GRID = grid_id) %>% 
+  drop_na() %>% 
+  group_by(ORIGIN_GRID, DESTIN_GRID) %>% 
+  summarise(MORNING_PEAK = sum(TRIPS))
+
+
+write_rds(od_data,  "data/rds/od_data.rds")
+od_data <- read_rds( "data/rds/od_data.rds")
+```
+:::
+
+# 4. Visualising Spatial Interaction
+
+In this section, you will learn how to prepare a desire line by using **stplanr** package.
+
+::: panel-tabset
+## Creating Flow Data
+
+### Removing intra-zonal flows
+
+We will not plot the intra-zonal flows. The code chunk below will be used to remove intra-zonal flows.
+
+```{r}
+od_data1 <- od_data[od_data$ORIGIN_GRID!=od_data$DESTIN_GRID,]
+```
+
+### Creating desire lines
+
+In this code chunk below, `od2line()` of **stplanr** package is used to create the desire lines.
+
+```{r}
+flowLine <- od2line(flow = od_data1,
+                    zones = hexagon_sf,
+                    zone_code = "grid_id")
+```
+
+## Visualising the desire lines for (MORNING_PEAK \>= 5000)
+
+To visualise the resulting desire lines, the code chunk below is used.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"        
+tm_shape(hexagon_sf) +
+  tm_polygons() +
+flowLine %>%  
+  filter(MORNING_PEAK >= 5000) %>%
+tm_shape() +
+  tm_lines(lwd = "MORNING_PEAK",
+           style = "quantile",
+           scale = c(0.1, 1, 3, 5, 7, 10),
+           n = 6,
+           alpha = 0.5)
+```
+
+The filtered results above likely describe a few key patterns to daily commuting for the morning peak weekdays:
+
+-   Those multiple and short lines are likely bus routes people take to the interchange for weekdays peak morning 6am to 9am for their daily commute.
+
+-   Those long bus routes across the country are probably the more efficient routes people can take via bus that's actually more convenient than by taking the train.
+
+Overall, these patterns suggest that the majority of people commute via bus to interchange or an mrt station before continuing the long journey ahead. However is this the most efficient commuting pattern or is it because we do not have other choices? After all, the huge volume of commute to the interchange likely means that busses stop at busstops for longer periods of time to alight passengers. Is it wise to build more busstops and install more traffic lights in between these routes?
+
+## Visualising the desire lines for (MORNING_PEAK \>= 10000)
+
+To visualise the resulting desire lines, the code chunk below is used.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"        
+tm_shape(hexagon_sf) +
+  tm_polygons() +
+flowLine %>%  
+  filter(MORNING_PEAK >= 10000) %>%
+tm_shape() +
+  tm_lines(lwd = "MORNING_PEAK",
+           style = "quantile",
+           scale = c(0.1, 1, 3, 5, 7, 10),
+           n = 6,
+           alpha = 0.5)
+```
+
+For MORNING_PEAK \>= 10000, it reveals a few possible interesting observations:
+
+-   One long-distance route stands out which is the Changi-Woodlands route. Also notably, the bus routes in Woodlands are quite prominent here, showing us just how many people are frequenting these routes.
+
+-   Apparently some hubs and interchanges have more frequented bus routes as compared to the others. One thing we can conclude is that the bus routes are frequented there more than others. However, there could be many reasons for such a phenomena. Jurong west and Jurong East seem to have higher flows as compared to other areas (other than Woodlands), however maybe it could be that the area is very inaccessible and inconvenient that it is necessary to commute via the train whereas other regions might have more accessible bus routes and train stations?
+
+## Visualising the desire lines for (MORNING_PEAK \>= 20000)
+
+To visualise the resulting desire lines, the code chunk below is used.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"        
+tm_shape(hexagon_sf) +
+  tm_polygons() +
+flowLine %>%  
+  filter(MORNING_PEAK >= 20000) %>%
+tm_shape() +
+  tm_lines(lwd = "MORNING_PEAK",
+           style = "quantile",
+           scale = c(0.1, 1, 3, 5, 7, 10),
+           n = 6,
+           alpha = 0.5)
+```
+
+Definitely an exceedingly high amount of traffic can be observed here, government should plan for new mrt locations with this in mind such that we can disperse the bulk of the traffic flow in these regions. Later on, we will proceed further to find out what are the factors that could have result in such phenomena.
+:::
+
+# 5. Preparing Distance Matrix and Flow Data
+
+::: panel-tabset
+## Preparing Distance Matrix
+
+### Converting hexagon_sf to SpatialPolygonsDataFrame
+
+We are required to compute a distance matrix by using the analytical hexagon data derived earlier.
+
+Research have shown that computing distance matrix by using sp method is more efficient for large datasets. In view of this, sp method is used in the code chunks below.
+
+First [`as.Spatial()`](https://r-spatial.github.io/sf/reference/coerce-methods.html) will be used to convert *hexagon_sf* from sf tibble data frame to SpatialPolygonsDataFrame of sp object as shown in the code chunk below.
+
+```{r}
+hexagon_sp <- as(hexagon_sf, "Spatial")
+hexagon_sp
+```
+
+### Computing the distance matrix
+
+Next, [`spDists()`](https://www.rdocumentation.org/packages/sp/versions/2.1-1/topics/spDistsN1) of sp package will be used to compute the Euclidean distance between the centroids of the planning subzones.
+
+```{r}
+dist <- spDists(hexagon_sp, 
+                longlat = FALSE)
+head(dist, n=c(10, 10))
+```
+
+### Labelling column and row heanders of a distance matrix
+
+First, we will create a list sorted according to the the distance matrix by planning grid_id.
+
+```{r}
+grid_names <- hexagon_sf$grid_id
+```
+
+Next we will attach grid_id to row and column for distance matrix matching ahead
+
+```{r}
+colnames(dist) <- paste0(grid_names)
+rownames(dist) <- paste0(grid_names)
+```
+
+### Pivoting distance value by grid_id
+
+```{r}
+distPair <- melt(dist) %>%
+  rename(dist = value)
+head(distPair, 10)
+```
+
+### Updating intra-zonal distances
+
+In this section, we are going to append a constant value to replace the intra-zonal distance of 0.
+
+First, we will select and find out the minimum value of the distance by using `summary()`
+
+```{r}
+distPair %>%
+  filter(dist > 0) %>%
+  summary()
+```
+
+We found out that the minimum distance is 375m, let's treat the intra-zone distance benchmark asan approximately 150m (or \~ 375/2).
+
+Hence, we added a constant distance value of 150 into intra-zones distance.
+
+```{r}
+distPair$dist <- ifelse(distPair$dist == 0,
+                        150, distPair$dist)
+```
+
+The code chunk below is used to rename the origin and destination fields.
+
+```{r}
+distPair <- distPair %>%
+  rename(orig = Var1,
+         dest = Var2)
+```
+
+Lastly, the code chunk below is used to save the dataframe for future use.
+
+```{r}
+write_rds(distPair, "data/rds/distPair.rds") 
+```
+
+Finally, we have prepared our distance matrix
+
+## Preparing Flow Data
+
+```{r}
+flow_data <- od_data %>%
+  group_by(ORIGIN_GRID, DESTIN_GRID) %>% 
+  summarize(TRIPS = sum(MORNING_PEAK)) 
+head(flow_data, 10)
+```
+
+### Separating intra-flow from passenger volume df
+
+Code chunk below is used to add three new fields in od_data dataframe.
+
+```{r}
+flow_data$FlowNoIntra <- ifelse(
+  flow_data$ORIGIN_GRID == flow_data$DESTIN_GRID, 
+  0, flow_data$TRIPS)
+flow_data$offset <- ifelse(
+  flow_data$ORIGIN_GRID == flow_data$DESTIN_GRID, 
+  0.000001, 1)
+```
+
+```{r}
+inter_zonal_flow <- flow_data %>%
+  filter(FlowNoIntra > 0)
+```
+
+### Combining passenger volume data with distance value
+
+Now, left_join() of dplyr will be used on flow_data dataframe and distPair dataframe. The output is called flow_data1.
+
+```{r}
+flow_data1 <- flow_data %>%
+  left_join (distPair,
+             by = c("ORIGIN_GRID" = "orig",
+                    "DESTIN_GRID" = "dest"))
+```
+
+let's change it back to factor
+
+```{r}
+flow_data$ORIGIN_GRID <- as.factor(flow_data$ORIGIN_GRID)
+flow_data$DESTIN_GRID <- as.factor(flow_data$DESTIN_GRID)
+```
+:::
+
+
+# 6. Preparing Attractiveness and Propulsiveness Attributes
+
+::: panel-tabset
+## School Proximity
+
+### School Count
+
+This attribute typically spans from 0 schools to 2 schools, with the majority of grids exhibiting 0 as the prevalent count. Consequently, it can be characterized as an ordinal variable, suggesting an ordered structure in the counts of schools within each grid. The emphasis on ordinality underscores the variable's nuanced nature, offering insights into the hierarchical distribution of school counts. Importantly, this attribute proves especially relevant in the context of spatial interaction models. This sets it apart from option 2, which involves measuring the distance to the nearest school, highlighting the distinct applications and considerations associated with each option.
+
+```{r}
+hexagon_sf$`SCHOOL_COUNT`<- lengths(
+  st_intersects(
+    hexagon_sf, schools_sf))
+summary(hexagon_sf$SCHOOL_COUNT)
+```
+
+### Distance to nearest School
+
+In this code snippet, the **st_nearest_feature** function is employed to find the nearest schools for each hexagon in the hexagon_sf spatial dataset based on the schools_sf dataset. The resulting indices are then used to subset the schools_sf, and distances between each hexagon and its nearest school are calculated using st_distance. The minimum distance for each hexagon is extracted and added as a new variable, **MIN_DISTANCE_TO_SCHOOL**, to the hexagon_sf dataset. Finally, a summary of the minimum distances is displayed. The code essentially computes and adds the minimum distance from each hexagon to its nearest school in the spatial datasets.
+
+```{r}
+# Use st_nearest_feature to get the indices of the nearest schools for each hexagon
+nearest_indices <- st_nearest_feature(hexagon_sf, schools_sf)
+
+# Subset the schools_sf using the indices
+nearest_schools <- schools_sf[nearest_indices, ]
+
+# Calculate the distances
+min_distances <- st_distance(hexagon_sf, nearest_schools)
+
+# Extract the minimum distance from each row
+hexagon_sf$MIN_DISTANCE_TO_SCHOOL <- apply(min_distances, 1, min)
+
+# Display summary of the minimum distances
+summary(hexagon_sf$MIN_DISTANCE_TO_SCHOOL)
+```
+## CBD Proximity
+```{r}
+
+# Calculate the distances
+hexagon_sf$dist_CBD <- st_distance(hexagon_sf, cbd_sf)
+
+# Display summary of the minimum distances
+summary(hexagon_sf$dist_CBD)
+```
+
+
+
+## Train Station Proximity
+
+## HDB Density / Hawker/ Commericial / Avg Age
+
+In this section, we utilise the number of dwelling units in a region as an indicator of density of residential use. Although this resulting variable might seem more appropriate for use for evening peak hours as compared to our scenario (weekday morning peak hours). A high residential use might indicate an indirectly indicate a lack of attractions in the area.
+
+Code chunk below populates the flats (i.e. unique_identifier) of hdb_sf data frame into hexagon_sf data frame.
+
+```{r}
+#| code-fold: true
+#| code-summary: "Show the code"
+# Combine Busstop and Hexagon
+hdb_hexagon <- st_intersection(hexagon_sf, hdb_sf)
+```
+
+
+```{r}
+hdb_hexagon_counts <- hdb_hexagon %>%
+  group_by(grid_id) %>%
+  summarise(
+    UNITS = sum(total_dwelling_units),
+    MARKET_HAWKER_Y = sum(market_hawker == "Y"),
+    COMMERCIAL_Y = sum(commercial == "Y"),
+    AVG_AGE = mean(Sys.Date() - year_completed, na.rm = TRUE)
+  )
+
+write_rds(hdb_hexagon_counts, "data/rds/hdb_hexagon_counts.rds")
+```
+
+No duplicates were found for whole rows
+
+```{r}
+duplicate <- hdb_hexagon %>%
+  group_by_all() %>%
+  filter(n()>1) %>%
+  ungroup()
+duplicate
+```
+
+There is no missing data
+
+```{r}
+#| eval=FALSE
+summary(hdb_hexagon)
+```
+
+```{r}
+hdb_hexagon <- hdb_hexagon %>% 
+  group_by(grid_id) %>% 
+  summarise(UNITS = sum(total_dwelling_units))
+```
+
+### Data Integration HDB and flow_data1
+
+Finally, we will append SCHOOL_COUNT and MIN_DISTANCE_TO_SCHOOL fields from hexagon_sf data.frame into flow_data sf tibble data.frame by using the code chunk below.
+
+```{r}
+flow_data1 <- flow_data1 %>%
+  left_join(hdb_hexagon,
+            by = c("DESTIN_GRID" = "grid_id")) 
+```
+
+## Business, FnB, Entertn, Leisure Count
+
+```{r}
+hexagon_sf$`Business_COUNT`<- lengths(
+  st_intersects(
+    hexagon_sf, Business))
+summary(hexagon_sf$Business_COUNT)
+```
+
+```{r}
+hexagon_sf$`Entertn_COUNT`<- lengths(
+  st_intersects(
+    hexagon_sf, Entertn))
+summary(hexagon_sf$Entertn_COUNT)
+```
+
+```{r}
+hexagon_sf$`FnB_COUNT`<- lengths(
+  st_intersects(
+    hexagon_sf, FnB))
+summary(hexagon_sf$FnB_COUNT)
+```
+
+```{r}
+hexagon_sf$`FinServ_COUNT`<- lengths(
+  st_intersects(
+    hexagon_sf, FinServ))
+summary(hexagon_sf$FinServ_COUNT)
+```
+
+### Data Integration with flow_data1
+
+Finally, we will append SCHOOL_COUNT and MIN_DISTANCE_TO_SCHOOL fields from hexagon_sf data.frame into flow_data sf tibble data.frame by using the code chunk below.
+
+```{r}
+flow_data1 <- flow_data1 %>%
+  left_join(hexagon_sf,
+            by = c("DESTIN_GRID" = "grid_id")) %>%
+  rename(DIST = dist)
+```
+:::

@@ -1,0 +1,23 @@
+---
+title: "In-class Exercise 5"
+date-modified: "last-modified"
+format: html
+execute: 
+  echo: true
+  eval: true
+  warning: false
+  
+highlight-style: github
+code:
+  style: "color: red;"
+---
+
+```{r}
+devtools::install_github("LukeCe/spflow")
+```
+
+```{r}
+pacman::p_load(sf, sp, httr, knitr, tidyverse, Matrix, spdep, reshape2, tmap, spflow)
+```
+
+
