@@ -783,6 +783,179 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
 <div class="cell">
 <div class="sourceCode cell-code" id="cb2"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a>pacman<span class="sc">::</span><span class="fu">p_load</span>(sf, sp, httr, knitr, tidyverse, Matrix, spdep, reshape2, tmap, spflow)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb3"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a>mpsz_nb <span class="ot">&lt;-</span> <span class="fu">read_rds</span>(<span class="st">"data/rds/mpsz_nb.rds"</span>)</span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a>mpsz_flow <span class="ot">&lt;-</span> <span class="fu">read_rds</span>(<span class="st">"data/rds/mpsz_flow.rds"</span>)</span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a>mpsz_var <span class="ot">&lt;-</span> <span class="fu">read_rds</span>(<span class="st">"data/rds/mpsz_var.rds"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb4"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a>mpsz_net <span class="ot">&lt;-</span> <span class="fu">spflow_network</span>(</span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">id_net =</span> <span class="st">"sg"</span>,</span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">node_neighborhood =</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a>    <span class="fu">nb2mat</span>(mpsz_nb<span class="sc">$</span>by_contiguity),</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">node_data=</span>mpsz_var,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">node_key_column=</span> <span class="st">"SZ_CODE"</span></span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>mpsz_net</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Spatial network nodes with id: sg
+--------------------------------------------------
+Number of nodes: 313
+Average number of links per node: 6.077
+Density of the neighborhood matrix: 1.94% (non-zero connections)
+
+Data on nodes:
+                SZ_NAME SZ_CODE BUSSTOP_COUNT AGE7_12 AGE13_24 AGE25_64
+1      INSTITUTION HILL  RVSZ05             2     330      360     2260
+2        ROBERTSON QUAY  SRSZ01            10     320      350     2200
+3          FORT CANNING  MUSZ02             6       0       10       30
+4      MARINA EAST (MP)  MPSZ05             2       0        0        0
+5               SENTOSA  SISZ01             1     200      260     1440
+6        CITY TERMINALS  BMSZ17            10       0        0        0
+---                 ---     ---           ---     ---      ---      ---
+308            NEE SOON  YSSZ07            12      90      140      590
+309       UPPER THOMSON  BSSZ01            47    1590     3660    15980
+310          SHANGRI-LA  AMSZ05            12     810     1920     9650
+311          TOWNSVILLE  AMSZ04             9     980     2000    11320
+312           MARYMOUNT  BSSZ02            25    1610     4060    16860
+313 TUAS VIEW EXTENSION  TSSZ06            11       0        0        0
+    SCHOOL_COUNT BUSINESS_COUNT RETAILS_COUNT FINSERV_COUNT ENTERTN_COUNT
+1              1              6            26             3             0
+2              0              4           207            18             6
+3              0              7            17             0             3
+4              0              0             0             0             0
+5              0              1            84            29             2
+6              0             11            14             4             0
+---          ---            ---           ---           ---           ---
+308            0              0             7             0             0
+309            3             21           305            30             0
+310            3              0            53             9             0
+311            1              0            83            11             0
+312            3             19           135             8             0
+313            0             53             3             1             0
+    FB_COUNT LR_COUNT COORD_X COORD_Y
+1          4        3  103.84    1.29
+2         38       11  103.84    1.29
+3          4        7  103.85    1.29
+4          0        0  103.88    1.29
+5         38       20  103.83    1.25
+6         15        0  103.85    1.26
+---      ---      ---     ---     ---
+308        0        0  103.81     1.4
+309        5       11  103.83    1.36
+310        0        0  103.84    1.37
+311        1        1  103.85    1.36
+312        3       11  103.84    1.35
+313        0        0  103.61    1.26</code></pre>
+</div>
+</div>
+<p>Create a spflow_network-class() In <strong>spflow</strong> package,</p>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb6"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb6-1"><a href="#cb6-1" aria-hidden="true" tabindex="-1"></a>mpsz_net_pairs <span class="ot">&lt;-</span> <span class="fu">spflow_network_pair</span>(</span>
+<span id="cb6-2"><a href="#cb6-2" aria-hidden="true" tabindex="-1"></a>  <span class="at">id_orig_net =</span><span class="st">"sf"</span>,</span>
+<span id="cb6-3"><a href="#cb6-3" aria-hidden="true" tabindex="-1"></a>  <span class="at">id_dest_net =</span> <span class="st">"sg"</span>,</span>
+<span id="cb6-4"><a href="#cb6-4" aria-hidden="true" tabindex="-1"></a>  <span class="at">pair_data=</span>mpsz_flow,</span>
+<span id="cb6-5"><a href="#cb6-5" aria-hidden="true" tabindex="-1"></a>  <span class="at">orig_key_column =</span> <span class="st">"ORIGIN_SZ"</span>,</span>
+<span id="cb6-6"><a href="#cb6-6" aria-hidden="true" tabindex="-1"></a>  <span class="at">dest_key_column =</span> <span class="st">"DESTIN_SZ"</span></span>
+<span id="cb6-7"><a href="#cb6-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-8"><a href="#cb6-8" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb6-9"><a href="#cb6-9" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb6-10"><a href="#cb6-10" aria-hidden="true" tabindex="-1"></a>mpsz_net_pairs</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Spatial network pair with id: sf_sg
+--------------------------------------------------
+Origin network id: sf (with 313 nodes)
+Destination network id: sg (with 313 nodes)
+Number of pairs: 97969
+Completeness of pairs: 100.00% (97969/97969)
+
+Data on node-pairs:
+      DESTIN_SZ ORIGIN_SZ DISTANCE TRIPS
+1        RVSZ05    RVSZ05        0    67
+314      SRSZ01    RVSZ05   305.74   251
+627      MUSZ02    RVSZ05   951.83     0
+940      MPSZ05    RVSZ05  5254.07     0
+1253     SISZ01    RVSZ05     4975     0
+1566     BMSZ17    RVSZ05  3176.16     0
+---         ---       ---      ---   ---
+96404    YSSZ07    TSSZ06 26972.97     0
+96717    BSSZ01    TSSZ06 25582.48     0
+97030    AMSZ05    TSSZ06 26714.79     0
+97343    AMSZ04    TSSZ06 27572.74     0
+97656    BSSZ02    TSSZ06  26681.7     0
+97969    TSSZ06    TSSZ06        0   270</code></pre>
+</div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb8"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb8-1"><a href="#cb8-1" aria-hidden="true" tabindex="-1"></a>mpsz_multi_net <span class="ot">&lt;-</span> <span class="fu">spflow_network_multi</span>(mpsz_net, mpsz_net_pairs)</span>
+<span id="cb8-2"><a href="#cb8-2" aria-hidden="true" tabindex="-1"></a>mpsz_multi_net</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="cell-output cell-output-stdout">
+<pre><code>Collection of spatial network nodes and pairs
+--------------------------------------------------
+Contains 1 spatial network nodes  
+    With id :  sg
+Contains 1 spatial network pairs  
+    With id :  sf_sg
+
+Availability of origin-destination pair information:
+
+ ID_ORIG_NET ID_DEST_NET ID_NET_PAIR COMPLETENESS   C_PAIRS  C_ORIG  C_DEST
+          sf          sg       sf_sg      100.00% 97969/(?) 313/(?) 313/313</code></pre>
+</div>
+</div>
+<p>Check independent variable pairs to gauge multi-colinearity Check dependent variable relationsiip with independent variable to check for relevance</p>
+<ul>
+<li>pair_cor() to create a correlation matrix, and</li>
+<li>cor_image()</li>
+</ul>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb10"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb10-1"><a href="#cb10-1" aria-hidden="true" tabindex="-1"></a>cor_formula <span class="ot">&lt;-</span> <span class="fu">log</span>(<span class="dv">1</span><span class="sc">+</span>TRIPS) <span class="sc">~</span></span>
+<span id="cb10-2"><a href="#cb10-2" aria-hidden="true" tabindex="-1"></a>  BUSSTOP_COUT<span class="sc">+</span></span>
+<span id="cb10-3"><a href="#cb10-3" aria-hidden="true" tabindex="-1"></a>  AGE7_12<span class="sc">+</span></span>
+<span id="cb10-4"><a href="#cb10-4" aria-hidden="true" tabindex="-1"></a>  AGE13_24<span class="sc">+</span></span>
+<span id="cb10-5"><a href="#cb10-5" aria-hidden="true" tabindex="-1"></a>  AGE_25_64<span class="sc">+</span></span>
+<span id="cb10-6"><a href="#cb10-6" aria-hidden="true" tabindex="-1"></a>  sCHOOL_COUNT <span class="sc">+</span></span>
+<span id="cb10-7"><a href="#cb10-7" aria-hidden="true" tabindex="-1"></a>  BUSINESS_COUNT <span class="sc">+</span></span>
+<span id="cb10-8"><a href="#cb10-8" aria-hidden="true" tabindex="-1"></a>  RETAILS_COUNT<span class="sc">+</span></span>
+<span id="cb10-9"><a href="#cb10-9" aria-hidden="true" tabindex="-1"></a>  FINSERV_COUT <span class="sc">+</span></span>
+<span id="cb10-10"><a href="#cb10-10" aria-hidden="true" tabindex="-1"></a>  <span class="fu">P_</span>(<span class="fu">log</span>(DISTANCE <span class="sc">+</span><span class="dv">1</span>))</span>
+<span id="cb10-11"><a href="#cb10-11" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-12"><a href="#cb10-12" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb10-13"><a href="#cb10-13" aria-hidden="true" tabindex="-1"></a> <span class="co"># cor_mat &lt;- pair_cor(</span></span>
+<span id="cb10-14"><a href="#cb10-14" aria-hidden="true" tabindex="-1"></a> <span class="co">#   mpsz_multi_net,</span></span>
+<span id="cb10-15"><a href="#cb10-15" aria-hidden="true" tabindex="-1"></a> <span class="co">#   spflow_formula = cor_formula,</span></span>
+<span id="cb10-16"><a href="#cb10-16" aria-hidden="true" tabindex="-1"></a> <span class="co">#   add_lags_x = FALSE)</span></span>
+<span id="cb10-17"><a href="#cb10-17" aria-hidden="true" tabindex="-1"></a> <span class="co"># </span></span>
+<span id="cb10-18"><a href="#cb10-18" aria-hidden="true" tabindex="-1"></a> <span class="co"># colnames(cor_mat) &lt;- paste0(</span></span>
+<span id="cb10-19"><a href="#cb10-19" aria-hidden="true" tabindex="-1"></a> <span class="co">#   substr(</span></span>
+<span id="cb10-20"><a href="#cb10-20" aria-hidden="true" tabindex="-1"></a> <span class="co">#     colnames(cor_mat,1,3),"..."</span></span>
+<span id="cb10-21"><a href="#cb10-21" aria-hidden="true" tabindex="-1"></a> <span class="co">#   )</span></span>
+<span id="cb10-22"><a href="#cb10-22" aria-hidden="true" tabindex="-1"></a> <span class="co"># )</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<ul>
+<li>MLE (default)</li>
+<li>Spatial 2SLS</li>
+<li>Bayesian- MCMC</li>
+</ul>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb11"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb11-1"><a href="#cb11-1" aria-hidden="true" tabindex="-1"></a><span class="co"># base_model &lt;- spflow(</span></span>
+<span id="cb11-2"><a href="#cb11-2" aria-hidden="true" tabindex="-1"></a><span class="co">#   spflow_formula = log(1+ TRIPS) ~</span></span>
+<span id="cb11-3"><a href="#cb11-3" aria-hidden="true" tabindex="-1"></a><span class="co">#     O_(BUSSTOP_COUNT +</span></span>
+<span id="cb11-4"><a href="#cb11-4" aria-hidden="true" tabindex="-1"></a><span class="co">#          AGE25_64)+</span></span>
+<span id="cb11-5"><a href="#cb11-5" aria-hidden="true" tabindex="-1"></a><span class="co">#     D_(SCHOOL_COUNT +</span></span>
+<span id="cb11-6"><a href="#cb11-6" aria-hidden="true" tabindex="-1"></a><span class="co">#          BUSINESS_COUNT +</span></span>
+<span id="cb11-7"><a href="#cb11-7" aria-hidden="true" tabindex="-1"></a><span class="co">#          RETAILS_COUNT +</span></span>
+<span id="cb11-8"><a href="#cb11-8" aria-hidden="true" tabindex="-1"></a><span class="co">#          FINSERV_COUNT) +</span></span>
+<span id="cb11-9"><a href="#cb11-9" aria-hidden="true" tabindex="-1"></a><span class="co">#     P_(log(DISTANCE +1)),</span></span>
+<span id="cb11-10"><a href="#cb11-10" aria-hidden="true" tabindex="-1"></a><span class="co">#   spflow_networks= mpsz_</span></span>
+<span id="cb11-11"><a href="#cb11-11" aria-hidden="true" tabindex="-1"></a><span class="co"># )</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
+<div class="cell">
+<div class="sourceCode cell-code" id="cb12"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb12-1"><a href="#cb12-1" aria-hidden="true" tabindex="-1"></a><span class="co"># old_par &lt;- par(nfrow = c(1,3),</span></span>
+<span id="cb12-2"><a href="#cb12-2" aria-hidden="true" tabindex="-1"></a><span class="co">#                mar = c(2,2,2,2))</span></span>
+<span id="cb12-3"><a href="#cb12-3" aria-hidden="true" tabindex="-1"></a><span class="co"># spflow_moran_plots(base_model)</span></span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+</div>
 
 
 
