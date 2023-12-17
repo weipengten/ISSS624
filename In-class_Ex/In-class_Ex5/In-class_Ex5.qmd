@@ -73,7 +73,7 @@ cor_formula <- log(1+TRIPS) ~
   AGE7_12+
   AGE13_24+
   AGE_25_64+
-  sCHOOL_COUNT +
+  SCHOOL_COUNT +
   BUSINESS_COUNT +
   RETAILS_COUNT+
   FINSERV_COUT +
