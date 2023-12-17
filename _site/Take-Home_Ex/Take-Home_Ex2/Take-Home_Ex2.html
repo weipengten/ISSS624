@@ -773,10 +773,7 @@ pre > code.sourceCode > span > a:first-child::before { text-decoration: underlin
   <li><a href="#preparing-distance-matrix-and-flow-data" id="toc-preparing-distance-matrix-and-flow-data" class="nav-link" data-scroll-target="#preparing-distance-matrix-and-flow-data">5. Preparing Distance Matrix and Flow Data</a></li>
   <li><a href="#preparing-attractiveness-and-propulsiveness-attributes" id="toc-preparing-attractiveness-and-propulsiveness-attributes" class="nav-link" data-scroll-target="#preparing-attractiveness-and-propulsiveness-attributes">6. Preparing Attractiveness and Propulsiveness Attributes</a></li>
   <li><a href="#calibrating-spatial-interaction-models" id="toc-calibrating-spatial-interaction-models" class="nav-link" data-scroll-target="#calibrating-spatial-interaction-models">7. Calibrating Spatial Interaction Models</a></li>
-  <li><a href="#spatial-modelling" id="toc-spatial-modelling" class="nav-link" data-scroll-target="#spatial-modelling">8.Spatial Modelling</a>
-  <ul class="collapse">
-  <li><a href="#importing-the-modelling-data" id="toc-importing-the-modelling-data" class="nav-link" data-scroll-target="#importing-the-modelling-data">Importing the modelling data</a></li>
-  </ul></li>
+  <li><a href="#spatial-modelling" id="toc-spatial-modelling" class="nav-link" data-scroll-target="#spatial-modelling">8.Spatial Modelling</a></li>
   </ul>
 </nav>
     </div>
@@ -2771,8 +2768,9 @@ MIN_DISTANCE_TO_MRTLINE     MIN_DISTANCE_TO_ITH    MIN_DISTANCE_TO_PARK
 <section id="spatial-modelling" class="level1">
 <h1>8.Spatial Modelling</h1>
 <p>For analysis focused on understanding origin flows, an <strong>Origin-constrained</strong> spatial model is more appropriate than <strong>Destination constrained</strong> spatial models. Similarly <strong>Unconstrained</strong> and <strong>Doubly constrained</strong> models are also appropriate</p>
-<section id="importing-the-modelling-data" class="level3">
-<h3 class="anchored" data-anchor-id="importing-the-modelling-data">Importing the modelling data</h3>
+<ul>
+<li>Importing the modelling data</li>
+</ul>
 <p>We first import the tidied spatial modelling data (<strong>flow_data_tidy_SIM</strong>) from an RDS file. This dataset is prepared for spatial interaction modeling.</p>
 <div class="cell">
 <div class="sourceCode cell-code" id="cb180"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb180-1"><a href="#cb180-1" aria-hidden="true" tabindex="-1"></a>flow_data_tidy_SIM <span class="ot">&lt;-</span> <span class="fu">read_rds</span>(<span class="st">"data/rds/flow_data_tidy.rds"</span>)</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
@@ -3030,7 +3028,6 @@ Number of Fisher Scoring iterations: 7</code></pre>
 </div>
 
 
-</section>
 </section>
 
 </main> <!-- /main -->

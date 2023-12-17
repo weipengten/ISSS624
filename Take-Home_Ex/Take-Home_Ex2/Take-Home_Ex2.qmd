@@ -2109,7 +2109,7 @@ write_rds(flow_data1,
 
 For analysis focused on understanding origin flows, an **Origin-constrained** spatial model is more appropriate than **Destination constrained** spatial models. Similarly **Unconstrained** and **Doubly constrained** models are also appropriate
 
-### Importing the modelling data
+-    Importing the modelling data
 
 We first import the tidied spatial modelling data (**flow_data_tidy_SIM**) from an RDS file. This dataset is prepared for spatial interaction modeling.
 
